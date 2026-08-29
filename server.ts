@@ -86,6 +86,7 @@ interface UserRecord {
   id: string;
   name: string;
   identifier: string; // Email or WhatsApp
+  password?: string;
   authMethod: "EMAIL" | "WHATSAPP";
   role: "ADMIN" | "MEMBER";
   registeredAt: number;
@@ -128,6 +129,7 @@ usersDb.set(ADMIN_EMAIL, {
   id: "USR-ADMIN-01",
   name: "LuqendIbnuHakim",
   identifier: ADMIN_EMAIL,
+  password: "admin123", // Admin default password
   authMethod: "EMAIL",
   role: "ADMIN",
   registeredAt: nowTime - 5 * 24 * 60 * 60 * 1000,
@@ -185,25 +187,34 @@ app.post("/api/auth/send-otp", (req, res) => {
   });
 });
 
-// 1B. Login via Email & Password (or Quick Register with 7-Day Trial)
+// 1B. Login via Email & Password (or Register with 7-Day Trial)
 app.post("/api/auth/login-password", (req, res) => {
   const { email, password, name, isRegister } = req.body;
   if (!email || !password) {
-    return res.status(400).json({ success: false, message: "Email dan Password wajib diisi" });
+    return res.status(400).json({ success: false, message: "Email / Nomor WhatsApp dan Password wajib diisi" });
   }
 
   const cleanEmail = String(email).trim().toLowerCase();
-  const isAdmin = cleanEmail === ADMIN_EMAIL || cleanEmail.includes("admin");
+  const isAdmin = cleanEmail === ADMIN_EMAIL || cleanEmail === ADMIN_PHONE;
   const now = Date.now();
 
   let user = usersDb.get(cleanEmail);
 
-  if (!user) {
-    // Automatically create user with 7-day trial
+  if (user) {
+    // Existing user: strictly verify password if user has a password set
+    if (user.password && user.password !== String(password).trim()) {
+      return res.status(401).json({
+        success: false,
+        message: "Password salah! Silakan periksa kembali kata sandi Anda.",
+      });
+    }
+  } else {
+    // New user registration: save their custom password and give 7-day trial
     user = {
       id: `USR-${Date.now().toString().slice(-6)}`,
       name: name || (cleanEmail.includes("@") ? cleanEmail.split("@")[0] : "Trader"),
       identifier: cleanEmail,
+      password: String(password).trim(),
       authMethod: "EMAIL",
       role: isAdmin ? "ADMIN" : "MEMBER",
       registeredAt: now,

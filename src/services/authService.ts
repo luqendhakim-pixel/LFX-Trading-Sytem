@@ -75,23 +75,8 @@ class AuthService {
           daysRemaining: calc.daysRemaining,
         };
       } else {
-        // Default initial session for owner/admin LuqendIbnuHakim
-        const now = Date.now();
-        const defaultAdmin: UserProfile = {
-          id: "USR-ADMIN-01",
-          name: "LuqendIbnuHakim",
-          identifier: ADMIN_EMAIL,
-          authMethod: "EMAIL",
-          role: "ADMIN",
-          registeredAt: now - 2 * 24 * 60 * 60 * 1000,
-          trialEndsAt: now + 5 * 24 * 60 * 60 * 1000,
-          subscriptionEndsAt: now + 365 * 24 * 60 * 60 * 1000,
-          isSubscriptionActive: true,
-          daysRemaining: 365,
-          status: "ADMIN",
-        };
-        this.currentUser = defaultAdmin;
-        this.saveToStorage(defaultAdmin);
+        // No user logged in by default - new visitors must login or register
+        this.currentUser = null;
       }
     } catch {
       this.currentUser = null;
@@ -151,7 +136,13 @@ class AuthService {
     } catch {
       // Local fallback
       const cleanEmail = email.trim().toLowerCase();
-      const isAdmin = cleanEmail === ADMIN_EMAIL || cleanEmail.includes("admin");
+      const isAdmin = cleanEmail === ADMIN_EMAIL || cleanEmail === ADMIN_PHONE;
+      
+      // Strict check for admin credentials in offline mode
+      if (isAdmin && password !== "admin123") {
+        return { success: false, message: "Password Admin tidak sesuai!" };
+      }
+
       const now = Date.now();
       const user: UserProfile = {
         id: `USR-${Date.now().toString().slice(-6)}`,
