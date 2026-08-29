@@ -1,54 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <radialGradient id="bgGrad" cx="50%" cy="40%" r="70%">
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="40%" r="75%">
       <stop offset="0%" stop-color="#0e172a" />
-      <stop offset="60%" stop-color="#060b18" />
+      <stop offset="60%" stop-color="#060c1c" />
       <stop offset="100%" stop-color="#020409" />
     </radialGradient>
     
+    <!-- Neon Cyan Gradient -->
     <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#00F5FF" />
       <stop offset="100%" stop-color="#00D29E" />
     </linearGradient>
 
+    <!-- Golden Spark Gradient -->
     <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FDE047" />
       <stop offset="100%" stop-color="#EAB308" />
     </linearGradient>
 
-    <filter id="cyanGlow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="10" result="blur" />
+    <!-- Subtle Glow Filters -->
+    <filter id="cyanGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
 
-    <filter id="goldGlow" x="-30%" y="-30%" width="160%" height="160%">
+    <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="6" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
 
-  <!-- Solid Square with rounded corners for safe maskable area -->
+  <!-- Solid Background for Android Adaptive / Maskable Icon Safe Zone -->
   <rect width="512" height="512" fill="url(#bgGrad)"/>
   
-  <!-- Subtle Hexagon / Shield Outer Glow Line -->
-  <circle cx="256" cy="256" r="236" fill="none" stroke="#00F5FF" stroke-opacity="0.2" stroke-width="3"/>
-  <circle cx="256" cy="256" r="230" fill="none" stroke="#00D29E" stroke-opacity="0.1" stroke-width="1.5"/>
+  <!-- Outer Circuit Ring (Inside 80% Safe Zone) -->
+  <circle cx="256" cy="256" r="215" fill="none" stroke="#00F5FF" stroke-opacity="0.25" stroke-width="3" stroke-dasharray="8 6"/>
+  <circle cx="256" cy="256" r="200" fill="none" stroke="#00D29E" stroke-opacity="0.15" stroke-width="1.5"/>
 
-  <!-- Logo Group centered inside 512x512 -->
-  <g transform="translate(18, 50)">
-    <!-- Letter L (Bold Pure White) -->
+  <!-- Logo Group centered inside 512x512 with safe margins -->
+  <g transform="translate(42, 85) scale(0.85)">
+    <!-- Letter L (Bold Solid Pure White) -->
     <path d="M 85 80 
-             L 85 210 
-             A 35 35 0 0 0 120 245 
-             L 195 245 
-             L 195 205 
-             L 130 205 
-             A 10 10 0 0 1 120 195 
-             L 120 80 
+             L 85 215 
+             A 30 30 0 0 0 115 245 
+             L 190 245 
+             L 190 205 
+             L 125 205 
+             A 10 10 0 0 1 115 195 
+             L 115 80 
              Z" 
           fill="#FFFFFF" />
 
-    <!-- Letter F (Bold Pure White) -->
+    <!-- Letter F (Bold Solid Pure White) -->
     <path d="M 215 80 
              L 315 80 
              L 315 115 
@@ -62,7 +66,7 @@
              Z" 
           fill="#FFFFFF" />
 
-    <!-- Letter X - Left Arm (White) -->
+    <!-- Letter X - Left Arm (Pure White) -->
     <path d="M 330 80 
              L 368 80 
              L 465 245 
@@ -70,7 +74,7 @@
              Z" 
           fill="#FFFFFF" />
 
-    <!-- Letter X - Right Glowing Neon Cyan Arm -->
+    <!-- Letter X - Right Arm (Electric Cyan / Emerald Gradient Glow) -->
     <path d="M 460 80 
              L 422 80 
              L 325 245 
@@ -80,36 +84,36 @@
           filter="url(#cyanGlow)" />
 
     <!-- Golden Upward Bullish Trend Spark / Arrow over the X -->
-    <path d="M 425 60 
-             L 468 60 
-             L 468 103 
-             L 452 87 
-             L 395 144 
-             L 375 124 
-             L 432 67 
+    <path d="M 425 55 
+             L 472 55 
+             L 472 102 
+             L 454 84 
+             L 395 143 
+             L 375 123 
+             L 434 64 
              Z" 
           fill="url(#goldGrad)" 
           filter="url(#goldGlow)" />
   </g>
 
-  <!-- Bottom Badge: LFX GOLD SIGNAL -->
-  <g transform="translate(256, 385)">
+  <!-- Bottom Badge: LFX TRADING SYSTEM -->
+  <g transform="translate(256, 370)">
     <!-- Pill Container -->
-    <rect x="-160" y="-18" width="320" height="36" rx="18" fill="#0b1329" stroke="#00F5FF" stroke-opacity="0.4" stroke-width="2"/>
+    <rect x="-140" y="-16" width="280" height="32" rx="16" fill="#081022" stroke="#00F5FF" stroke-opacity="0.5" stroke-width="1.5"/>
     
     <!-- Left Accent Dot -->
-    <circle cx="-135" cy="0" r="5" fill="#00F5FF" />
+    <circle cx="-118" cy="0" r="4" fill="#00F5FF" />
     
-    <!-- Text Paths / Vectorized 'XAU/USD AI TERMINAL' -->
-    <text x="0" y="6" 
+    <!-- Label -->
+    <text x="0" y="5" 
           text-anchor="middle"
           font-family="Arial, Helvetica, sans-serif" 
-          font-size="16" 
+          font-size="14" 
           font-weight="900" 
-          letter-spacing="4" 
+          letter-spacing="3" 
           fill="#00F5FF">XAU/USD TERMINAL</text>
 
     <!-- Right Accent Dot -->
-    <circle cx="135" cy="0" r="5" fill="#00D29E" />
+    <circle cx="118" cy="0" r="4" fill="#00D29E" />
   </g>
 </svg>

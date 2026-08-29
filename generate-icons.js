@@ -1,4 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+import fs from 'fs';
+import path from 'path';
+import sharp from 'sharp';
+
+const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <!-- Background Gradient -->
     <radialGradient id="bgGrad" cx="50%" cy="40%" r="75%">
@@ -116,4 +120,61 @@
     <!-- Right Accent Dot -->
     <circle cx="118" cy="0" r="4" fill="#00D29E" />
   </g>
-</svg>
+</svg>`;
+
+async function generate() {
+  const publicDir = path.join(process.cwd(), 'public');
+  
+  // Save SVGs
+  fs.writeFileSync(path.join(publicDir, 'app-icon.svg'), svgContent);
+  fs.writeFileSync(path.join(publicDir, 'favicon.svg'), svgContent);
+  fs.writeFileSync(path.join(publicDir, 'lfx-logo.svg'), svgContent);
+
+  const svgBuffer = Buffer.from(svgContent);
+
+  // Generate 512x512 PNG
+  await sharp(svgBuffer)
+    .resize(512, 512)
+    .png({ palette: false, force: true })
+    .toFile(path.join(publicDir, 'icon-512.png'));
+
+  // Generate 192x192 PNG
+  await sharp(svgBuffer)
+    .resize(192, 192)
+    .png({ palette: false, force: true })
+    .toFile(path.join(publicDir, 'icon-192.png'));
+
+  // Generate Maskable 512x512
+  await sharp(svgBuffer)
+    .resize(512, 512)
+    .png({ palette: false, force: true })
+    .toFile(path.join(publicDir, 'icon-maskable-512.png'));
+
+  // Generate Maskable 192x192
+  await sharp(svgBuffer)
+    .resize(192, 192)
+    .png({ palette: false, force: true })
+    .toFile(path.join(publicDir, 'icon-maskable-192.png'));
+
+  // Generate Apple Touch Icon (180x180)
+  await sharp(svgBuffer)
+    .resize(180, 180)
+    .png({ palette: false, force: true })
+    .toFile(path.join(publicDir, 'apple-touch-icon.png'));
+
+  // Generate Favicon (64x64)
+  await sharp(svgBuffer)
+    .resize(64, 64)
+    .png({ palette: false, force: true })
+    .toFile(path.join(publicDir, 'favicon.png'));
+
+  // Generate lfx-logo.png
+  await sharp(svgBuffer)
+    .resize(512, 512)
+    .png({ palette: false, force: true })
+    .toFile(path.join(publicDir, 'lfx-logo.png'));
+
+  console.log('Successfully generated all LFX PWA icons!');
+}
+
+generate().catch(console.error);
