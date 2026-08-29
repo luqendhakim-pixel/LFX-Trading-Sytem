@@ -1,6 +1,6 @@
 import { UserProfile, AuthMethod, UserRole, SubscriptionStatus, LicenseActivationCode } from "../types";
 
-const AUTH_STORAGE_KEY = "lfx_auth_user_v1";
+const AUTH_STORAGE_KEY = "lfx_auth_session_v2";
 const ADMIN_EMAIL = "luqendhakim@gmail.com";
 const ADMIN_PHONE = "08123456789";
 
@@ -64,6 +64,11 @@ class AuthService {
 
   private loadFromStorage(): void {
     try {
+      // Purge legacy storage keys from previous development iterations
+      localStorage.removeItem("lfx_user_profile");
+      localStorage.removeItem("lfx_auth_user_v1");
+      localStorage.removeItem("lfx_user_session");
+
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as UserProfile;
