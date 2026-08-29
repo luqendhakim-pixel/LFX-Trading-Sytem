@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <rect width="100%" height="100%" fill="#030712"/>
+  
+  <g transform="translate(100, 90)">
+    <!-- Letter L -->
+    <path d="M 60 40 
+             L 60 170 
+             A 50 50 0 0 0 110 220 
+             L 200 220 
+             L 200 175 
+             L 115 175 
+             A 10 10 0 0 1 105 165 
+             L 105 40 
+             Z" 
+          fill="#FFFFFF" />
+
+    <!-- Letter F -->
+    <path d="M 215 40 
+             L 345 40 
+             L 345 82 
+             L 260 82 
+             L 260 115 
+             L 330 115 
+             L 330 155 
+             L 260 155 
+             L 260 220 
+             L 215 220 
+             Z" 
+          fill="#FFFFFF" />
+
+    <!-- Letter X (White diagonal: top-left to bottom-right) -->
+    <path d="M 370 40 
+             L 415 40 
+             L 550 220 
+             L 505 220 
+             Z" 
+          fill="#FFFFFF" />
+
+    <!-- Letter X (Cyan diagonal: top-right to bottom-left) -->
+    <path d="M 545 40 
+             L 500 40 
+             L 365 220 
+             L 410 220 
+             Z" 
+          fill="#00E5B9" />
+  </g>
+
+  <!-- Subtitle: — TRADING SYSTEM — -->
+  <g transform="translate(400, 390)" text-anchor="middle">
+    <!-- Left Dash -->
+    <rect x="-240" y="-8" width="36" height="5" rx="2.5" fill="#00E5B9"/>
+    
+    <!-- Text -->
+    <text x="0" y="0" 
+          font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+          font-size="24" 
+          font-weight="800" 
+          letter-spacing="9" 
+          fill="#FFFFFF">TRADING SYSTEM</text>
+    
+    <!-- Right Dash -->
+    <rect x="204" y="-8" width="36" height="5" rx="2.5" fill="#00E5B9"/>
+  </g>
+</svg>

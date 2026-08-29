@@ -1,0 +1,383 @@
+import React, { useState, useMemo } from "react";
+import {
+  Bell,
+  Settings,
+  Smartphone,
+  X,
+  TrendingUp,
+  BookOpen,
+  Trophy,
+  Bitcoin,
+  ExternalLink,
+  ChevronRight,
+  Sparkles,
+  Sliders,
+  DollarSign,
+  ShieldCheck,
+  Activity,
+} from "lucide-react";
+import { AISignal, Timeframe } from "../types";
+import { TradingViewWidget } from "./TradingViewWidget";
+import { LfxLogo } from "./LfxLogo";
+
+interface HomeDashboardViewProps {
+  onOpenNotifications: () => void;
+  onOpenSettings: () => void;
+  onNavigateToTab: (tab: "BERANDA" | "SIGNAL" | "CHAT" | "INDIKATOR" | "AKUN") => void;
+  onSelectSignal: (signal: AISignal) => void;
+  signalsList: AISignal[];
+  currentSignal: AISignal | null;
+  onOpenEducationModal: () => void;
+  onOpenContestModal: () => void;
+  onRequestPushNotification: () => void;
+  pushNotificationEnabled: boolean;
+}
+
+export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
+  onOpenNotifications,
+  onOpenSettings,
+  onNavigateToTab,
+  onSelectSignal,
+  signalsList,
+  currentSignal,
+  onOpenEducationModal,
+  onOpenContestModal,
+  onRequestPushNotification,
+  pushNotificationEnabled,
+}) => {
+  const [showAndroidBanner, setShowAndroidBanner] = useState(true);
+
+  // Calculate actual Performance Metrics strictly from closed/historical signals
+  const closedSignals = useMemo(() => {
+    return signalsList.filter((s) => s.signalStatus !== "ACTIVE" && s.status !== "ACTIVE");
+  }, [signalsList]);
+
+  const { totalPips, winRatePercent, closedCount } = useMemo(() => {
+    let pipsSum = 0;
+    let winCount = 0;
+
+    closedSignals.forEach((sig) => {
+      let pips = 0;
+      if (typeof sig.realizedPips === "number") {
+        pips = sig.realizedPips;
+      } else {
+        // Fallback based on signalStatus
+        switch (sig.signalStatus) {
+          case "TP1 HIT":
+            pips = sig.pipsTp1 || 50;
+            break;
+          case "TP2 HIT":
+            pips = sig.pipsTp2 || 100;
+            break;
+          case "TP3 HIT":
+            pips = sig.pipsTp3 || 150;
+            break;
+          case "SL HIT":
+            pips = -(sig.pipsSl || 50);
+            break;
+          case "BREAK EVEN":
+            pips = 0;
+            break;
+          case "CLOSED":
+          default:
+            pips = 0;
+            break;
+        }
+      }
+
+      pipsSum += pips;
+      if (pips > 0 || sig.closeResult === "WIN") {
+        winCount++;
+      }
+    });
+
+    const totalCount = closedSignals.length;
+    const rate = totalCount > 0 ? Math.round((winCount / totalCount) * 100) : 0;
+
+    return {
+      totalPips: pipsSum,
+      winRatePercent: rate,
+      closedCount: totalCount,
+    };
+  }, [closedSignals]);
+  const [selectedTf, setSelectedTf] = useState<Timeframe>("H1");
+
+  const getStatusBadge = (status?: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return "bg-emerald-500/20 text-emerald-400 border-emerald-500/40";
+      case "TP1 HIT":
+      case "TP2 HIT":
+      case "TP3 HIT":
+      case "TP4 HIT":
+        return "bg-cyan-500/20 text-cyan-300 border-cyan-500/40";
+      case "BREAK EVEN":
+        return "bg-blue-500/20 text-blue-300 border-blue-500/40";
+      case "SL HIT":
+        return "bg-rose-950/60 text-rose-400 border-rose-600/40";
+      case "CLOSED":
+      default:
+        return "bg-slate-800/80 text-slate-300 border-slate-700";
+    }
+  };
+
+  return (
+    <div
+      id="home-dashboard-view"
+      className="w-full max-w-lg md:max-w-3xl mx-auto pb-28 pt-2 px-3 sm:px-4 text-slate-100 space-y-4 animate-fadeIn"
+    >
+      {/* 0. Top Main Brand Header Bar with LFX Logo */}
+      <div className="flex items-center justify-between py-2 px-3 sm:px-4 rounded-2xl bg-[#060a15]/90 border border-slate-800/80 backdrop-blur-md shadow-lg">
+        {/* Left: LFX TRADING SYSTEM Official Logo */}
+        <div className="flex items-center gap-3">
+          <div className="relative group cursor-pointer" onClick={() => onNavigateToTab("BERANDA")}>
+            <LfxLogo variant="full" className="h-9 sm:h-10 transition-transform group-hover:scale-105" />
+          </div>
+        </div>
+
+        {/* Right: Live Market & Actions */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          <div className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] font-bold text-emerald-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>XAU/USD LIVE</span>
+          </div>
+
+          <button
+            id="btn-top-notif"
+            onClick={onOpenNotifications}
+            className="relative p-2 rounded-xl bg-[#0e1529] border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition cursor-pointer"
+            title="Notifikasi Sinyal"
+          >
+            <Bell className="w-4 h-4" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full animate-ping"></span>
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
+          </button>
+
+          <button
+            id="btn-top-settings"
+            onClick={onOpenSettings}
+            className="p-2 rounded-xl bg-[#0e1529] border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition cursor-pointer"
+            title="Pengaturan Akun & Exness"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* 1. User Profile Greeting Bar */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-3">
+          {/* Avatar Icon */}
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 via-indigo-600 to-purple-500 p-0.5 shadow-md flex items-center justify-center">
+            <div className="w-full h-full bg-[#070c1e] rounded-full flex items-center justify-center text-cyan-400 font-black text-sm">
+              LH
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-sm sm:text-base font-black text-white tracking-tight">
+              Halo, LuqendIbnuHakim
+            </h2>
+            <p className="text-xs text-slate-400 font-mono">lu••••••••@gmail.com</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Card Banner: PERFORMA SINYAL */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c1630] via-[#091124] to-[#060a16] border border-slate-800/90 p-4 sm:p-5 shadow-2xl">
+        <div className="relative z-10 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+              PERFORMA SINYAL
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {winRatePercent}% winrate • {closedCount} sinyal close
+            </div>
+          </div>
+          <div className="text-right">
+            <div className={`text-2xl sm:text-3xl font-black tracking-tight ${
+              totalPips >= 0 ? "text-emerald-400" : "text-rose-400"
+            }`}>
+              {totalPips >= 0 ? `+${totalPips.toLocaleString()}` : totalPips.toLocaleString()} pips
+            </div>
+          </div>
+        </div>
+
+        {/* Radiant Neon Green Sparkline Chart across bottom */}
+        <div className="mt-3 -mx-4 -mb-4 pt-2">
+          <svg viewBox="0 0 300 50" className="w-full h-12 stroke-emerald-400 fill-emerald-500/10">
+            <defs>
+              <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
+                <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M0,45 Q30,42 60,38 T120,30 T180,32 T240,20 T300,10 L300,50 L0,50 Z"
+              fill="url(#sparklineGrad)"
+            />
+            <path
+              d="M0,45 Q30,42 60,38 T120,30 T180,32 T240,20 T300,10"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+      </div>
+
+      {/* 3. Android App / Realtime Push Notification Banner */}
+      {showAndroidBanner && (
+        <div className="relative flex items-center justify-between p-3 sm:p-3.5 bg-[#0f172a]/90 border border-amber-500/30 rounded-2xl shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-white">
+                Pasang Aplikasi Android & Notifikasi HP
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                Lebih cepat, hemat data & notifikasi sinyal realtime
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onRequestPushNotification}
+              className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-2.5 py-1 rounded-lg text-[11px] font-black shrink-0 shadow transition cursor-pointer"
+            >
+              {pushNotificationEnabled ? "Aktif ✓" : "Aktifkan"}
+            </button>
+            <button
+              onClick={() => setShowAndroidBanner(false)}
+              className="text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Live TradingView Chart Preview Section */}
+      <div className="bg-[#080c18] border border-slate-800 rounded-3xl p-3 sm:p-4 space-y-3 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-extrabold text-white">XAU/USD</span>
+          </div>
+
+          <a
+            href="https://www.tradingview.com/symbols/XAUUSD/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 font-mono font-bold"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>live • TradingView</span>
+            <ExternalLink className="w-3 h-3 ml-0.5" />
+          </a>
+        </div>
+
+        {/* Timeframe pills */}
+        <div className="flex items-center gap-1.5">
+          {(["M1", "M5", "M15", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
+            <button
+              key={tf}
+              onClick={() => setSelectedTf(tf)}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                selectedTf === tf
+                  ? "bg-sky-500 text-slate-950 shadow font-black"
+                  : "bg-[#0d1326] text-slate-400 hover:text-slate-200 border border-slate-800"
+              }`}
+            >
+              {tf === "M1" ? "1m" : tf === "M5" ? "5m" : tf === "M15" ? "15m" : tf === "H1" ? "1H" : tf === "H4" ? "4H" : "D1"}
+            </button>
+          ))}
+        </div>
+
+        {/* Direct TradingView Widget Container */}
+        <div className="w-full h-80 rounded-2xl overflow-hidden border border-slate-800/80 bg-[#05070c]">
+          <TradingViewWidget symbol="OANDA:XAUUSD" theme="dark" timeframe={selectedTf} />
+        </div>
+      </div>
+
+      {/* 6. Section: Signal Terbaru */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-sm font-black text-slate-200">Signal Terbaru</h3>
+          <button
+            onClick={() => onNavigateToTab("SIGNAL")}
+            className="text-xs text-sky-400 hover:text-sky-300 font-semibold cursor-pointer"
+          >
+            Lihat semua
+          </button>
+        </div>
+
+        {/* Signal Cards */}
+        <div className="space-y-2">
+          {signalsList.slice(0, 4).map((sig) => {
+            const isBuy = sig.signalType.includes("BUY");
+            const price = sig.entryPrice.toFixed(3);
+            const status = sig.signalStatus || (sig.status === "ACTIVE" ? "ACTIVE" : "CLOSED");
+
+            return (
+              <div
+                key={sig.id}
+                onClick={() => onSelectSignal(sig)}
+                className="relative flex items-center justify-between p-3.5 bg-[#0b1021] hover:bg-[#0f172e] border border-slate-800/90 rounded-2xl transition cursor-pointer active:scale-98 shadow-sm group"
+              >
+                {/* Left Colored Accent Bar */}
+                <div
+                  className={`absolute left-0 top-3 bottom-3 w-1.5 rounded-r-full ${
+                    isBuy ? "bg-emerald-500" : "bg-rose-500"
+                  }`}
+                ></div>
+
+                {/* Signal Action & Symbol */}
+                <div className="flex items-center gap-2 pl-2">
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase ${
+                      isBuy
+                        ? "bg-emerald-950/80 text-emerald-400 border border-emerald-500/40"
+                        : "bg-rose-950/80 text-rose-400 border border-rose-500/40"
+                    }`}
+                  >
+                    {isBuy ? "BUY" : "SELL"}
+                  </span>
+                  <span className="font-extrabold text-sm text-white">{sig.symbol || "XAUUSD"}</span>
+                </div>
+
+                {/* Price, Pips & Status Badge */}
+                <div className="flex items-center gap-2.5">
+                  {status !== "ACTIVE" && typeof sig.realizedPips === "number" && (
+                    <span
+                      className={`text-xs font-mono font-black ${
+                        sig.realizedPips > 0
+                          ? "text-emerald-400"
+                          : sig.realizedPips < 0
+                          ? "text-rose-400"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {sig.realizedPips > 0 ? `+${sig.realizedPips}` : sig.realizedPips} pips
+                    </span>
+                  )}
+                  <span className="font-mono font-bold text-sm text-slate-200">{price}</span>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${getStatusBadge(
+                      status
+                    )}`}
+                  >
+                    {status}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};

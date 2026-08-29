@@ -1,0 +1,6 @@
+{
+  "name": "LFX Trading System - XAU/USD AI Trading Terminal",
+  "description": "Real-time XAU/USD gold trading terminal with LFX AI technical analysis, TradingView TSS v6 strategy, risk management, and mobile signal notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
