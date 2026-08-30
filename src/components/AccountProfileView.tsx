@@ -18,6 +18,11 @@ import {
   CreditCard,
   ShieldAlert,
   Clock,
+  Share2,
+  Send,
+  QrCode,
+  Download,
+  CheckCircle2,
 } from "lucide-react";
 import { getPineScriptCode } from "../utils/trendStateStrategy";
 import { notificationService } from "../utils/notificationService";
@@ -42,7 +47,12 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
 }) => {
   const [user, setUser] = useState<UserProfile | null>(() => authService.getUser());
   const [copiedScript, setCopiedScript] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+
+  // App Install / Share URL
+  const appShareUrl = typeof window !== "undefined" ? window.location.origin : "https://ais-pre-e3isyvyngizwm2zepa7lip-980619735100.asia-southeast1.run.app";
 
   useEffect(() => {
     const unsub = authService.subscribe((u) => {
@@ -57,6 +67,44 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
     navigator.clipboard.writeText(pineScriptCode);
     setCopiedScript(true);
     setTimeout(() => setCopiedScript(false), 2500);
+  };
+
+  const handleCopyShareLink = () => {
+    navigator.clipboard.writeText(appShareUrl);
+    setCopiedShareLink(true);
+    setTimeout(() => setCopiedShareLink(false), 3000);
+  };
+
+  const handleNativeShare = async () => {
+    const shareData = {
+      title: "LFX Trading System - Sinyal XAU/USD Real-Time",
+      text: "🔥 Gunakan LFX Trading System untuk mendapatkan sinyal realtime XAU/USD, analisis SMC, dan TSS Strategy. Buka & pasang aplikasi langsung di handphone:",
+      url: appShareUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        // User cancelled or ignored
+      }
+    } else {
+      handleCopyShareLink();
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    const message = encodeURIComponent(
+      `🔥 *LFX TRADING SYSTEM (XAU/USD PRO)* 🔥\n\nAplikasi sinyal real-time XAU/USD dengan SMC (Order Block, FVG), TSS Strategy, dan Kalender Berita Ekonomi Akurat.\n\n📱 *Buka & Pasang Aplikasi di sini:*\n${appShareUrl}\n\n_Buka di Chrome/Safari -> Pilih Tambah ke Layar Utama (Add to Home Screen) untuk install langsung di HP!_`
+    );
+    window.open(`https://api.whatsapp.com/send?text=${message}`, "_blank");
+  };
+
+  const handleShareTelegram = () => {
+    const text = encodeURIComponent(
+      `🔥 LFX TRADING SYSTEM (XAU/USD PRO)\nSinyal Real-time XAU/USD & Smart Money Concept Strategy.\nInstall di sini: ${appShareUrl}`
+    );
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(appShareUrl)}&text=${text}`, "_blank");
   };
 
   const handleTestNotification = () => {
@@ -127,7 +175,7 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
 
           <button
             onClick={handleLogout}
-            className="p-2 rounded-xl bg-slate-800/80 hover:bg-rose-950/80 hover:text-rose-300 text-slate-400 transition"
+            className="p-2 rounded-xl bg-slate-800/80 hover:bg-rose-950/80 hover:text-rose-300 text-slate-400 transition cursor-pointer"
             title="Keluar / Ganti Akun"
           >
             <LogOut className="w-4 h-4" />
@@ -166,6 +214,149 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
               {user?.status === "SUBSCRIBED" ? "Perpanjang VIP" : "Langganan VIP"}
             </button>
           )}
+        </div>
+      </div>
+
+      {/* 🚀 BAGIKAN & INSTALL APLIKASI (SHARE INSTALL LINK) */}
+      <div
+        id="share-app-install-card"
+        className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-[#0c1830] via-[#091124] to-[#060b17] border border-cyan-500/40 shadow-xl space-y-3.5 relative overflow-hidden"
+      >
+        <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+        {/* Card Header */}
+        <div className="flex items-center justify-between pb-2.5 border-b border-slate-800/80 relative z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-md">
+              <Share2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5">
+                <span>Bagikan & Pasang Aplikasi</span>
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  Instant Link
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Ajak teman atau rekan trader memasang aplikasi LFX Trading System
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Link URL Display & 1-Click Copy Box */}
+        <div className="space-y-1.5">
+          <label className="text-[11px] text-slate-300 font-semibold flex items-center justify-between">
+            <span>Link Instalasi Aplikasi Anda:</span>
+            {copiedShareLink && (
+              <span className="text-emerald-400 font-bold text-[10.5px] flex items-center gap-1 animate-pulse">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Berhasil Disalin!
+              </span>
+            )}
+          </label>
+
+          <div className="flex items-center gap-2 bg-[#040711] border border-cyan-500/30 p-1.5 pl-3 rounded-2xl shadow-inner">
+            <span className="text-xs font-mono text-cyan-300 truncate select-all flex-1">
+              {appShareUrl}
+            </span>
+
+            <button
+              onClick={handleCopyShareLink}
+              className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shrink-0 transition active:scale-95 cursor-pointer shadow-md ${
+                copiedShareLink
+                  ? "bg-emerald-500 text-slate-950 shadow-emerald-500/30"
+                  : "bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-cyan-500/20"
+              }`}
+            >
+              {copiedShareLink ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Tersalin!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Salin Link</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Share Action Buttons (WhatsApp, Telegram, Native Share, QR) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+          {/* WhatsApp */}
+          <button
+            onClick={handleShareWhatsApp}
+            className="py-2.5 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
+          >
+            <Send className="w-3.5 h-3.5 text-emerald-400" />
+            <span>WhatsApp</span>
+          </button>
+
+          {/* Telegram */}
+          <button
+            onClick={handleShareTelegram}
+            className="py-2.5 px-3 rounded-xl bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
+          >
+            <Send className="w-3.5 h-3.5 text-sky-400" />
+            <span>Telegram</span>
+          </button>
+
+          {/* Native Mobile Share */}
+          <button
+            onClick={handleNativeShare}
+            className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
+          >
+            <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Bagikan</span>
+          </button>
+
+          {/* QR Code */}
+          <button
+            onClick={() => setShowQrModal(!showQrModal)}
+            className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
+          >
+            <QrCode className="w-3.5 h-3.5 text-amber-400" />
+            <span>{showQrModal ? "Tutup QR" : "QR Code"}</span>
+          </button>
+        </div>
+
+        {/* Expandable QR Code Box */}
+        {showQrModal && (
+          <div className="p-4 rounded-2xl bg-[#040711] border border-cyan-500/40 flex flex-col items-center justify-center text-center space-y-2.5 animate-fadeIn">
+            <span className="text-xs font-bold text-slate-200">
+              Scan QR Code untuk Membuka & Pasang di HP
+            </span>
+            <div className="p-3 bg-white rounded-2xl shadow-xl">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                  appShareUrl
+                )}&bgcolor=ffffff&color=030712&margin=1`}
+                alt="QR Code LFX App"
+                className="w-36 h-36 sm:w-44 sm:h-44 object-contain rounded-lg"
+              />
+            </div>
+            <p className="text-[10.5px] text-slate-400 max-w-xs">
+              Arahkan kamera smartphone ke kode QR di atas untuk membuka aplikasi secara instan.
+            </p>
+          </div>
+        )}
+
+        {/* Installation Guide Tip */}
+        <div className="p-3 rounded-2xl bg-[#060b17] border border-slate-800 text-[11px] text-slate-300 space-y-1.5">
+          <div className="flex items-center gap-1.5 text-cyan-300 font-bold">
+            <Download className="w-3.5 h-3.5" />
+            <span>Panduan Memasang Aplikasi di Layar Utama HP (PWA):</span>
+          </div>
+          <ul className="space-y-1 text-slate-400 pl-4 list-disc text-[10.5px] leading-relaxed">
+            <li>
+              <strong className="text-slate-200">Android (Chrome):</strong> Buka link → Tekan titik 3 di kanan atas → Pilih <span className="text-cyan-300 font-semibold">"Tambahkan ke Layar Utama" / "Install App"</span>.
+            </li>
+            <li>
+              <strong className="text-slate-200">iPhone / iPad (Safari):</strong> Buka link → Tekan tombol Share (ikon kotak panah ke atas) → Pilih <span className="text-cyan-300 font-semibold">"Add to Home Screen"</span>.
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -298,3 +489,4 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
     </div>
   );
 };
+
