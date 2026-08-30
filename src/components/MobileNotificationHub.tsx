@@ -123,19 +123,50 @@ export const MobileNotificationHub: React.FC<MobileNotificationHubProps> = ({
         </div>
       </div>
 
-      {/* Verification Workflow Explanation Card */}
-      <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-1.5">
-        <div className="flex items-center gap-1.5 text-amber-400 font-bold text-[11px]">
-          <ShieldCheck className="w-3.5 h-3.5" />
-          <span>ALUR VERIFIKASI SEBELUM AKUN RIIL:</span>
+      {/* Verification Workflow & Mobile Background Push Explanation Card */}
+      <div className="p-3.5 bg-gradient-to-br from-slate-900 via-[#0a1020] to-slate-900 rounded-2xl border border-sky-500/30 text-xs text-slate-300 space-y-2 shadow-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sky-400 font-bold text-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse"></span>
+            <span>NOTIFIKASI BILAH STATUS HP (WHATSAPP-STYLE):</span>
+          </div>
+          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+            browserPermission === "granted"
+              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+              : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+          }`}>
+            {browserPermission === "granted" ? "Status Bar: AKTIF ✓" : "Izin Dibutuhkan"}
+          </span>
         </div>
-        <p className="text-[11px] text-slate-300 leading-relaxed">
-          1. <strong>Terminal mengeksekusi otomatis</strong> di saldo demo/dummy untuk menguji win-rate.
-          <br />
-          2. <strong>Notifikasi instan terkirim ke HP</strong> saat AI mendeteksi Buy / Sell / TP / SL.
-          <br />
-          3. Anda dapat <strong>salin parameter dalam 1-klik</strong> untuk entry manual di aplikasi Exness MT4/MT5 HP.
+
+        <p className="text-[11.5px] text-slate-300 leading-relaxed">
+          🔔 <strong>Saat aplikasi di-minimize atau layar HP terkunci</strong>, notifikasi sinyal entry & update TP/SL/BE akan otomatis muncul di bilah notifikasi atas handphone Anda layaknya notifikasi chat WhatsApp.
         </p>
+
+        {browserPermission !== "granted" ? (
+          <div className="pt-1">
+            <button
+              onClick={handleRequestBrowserPermission}
+              className="w-full py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
+            >
+              <Radio className="w-4 h-4 text-slate-950 animate-pulse" />
+              <span>Izinkan Notifikasi Muncul di Bilah HP Sekarang</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[11px] text-emerald-400 font-semibold">
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Izin Browser & Service Worker Aktif.</span>
+            </span>
+            <button
+              onClick={onSendTestNotification}
+              className="text-sky-400 hover:text-sky-300 underline font-bold cursor-pointer"
+            >
+              Kirim Tes ke Status Bar HP →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Simulated Smartphone Lockscreen Feed */}

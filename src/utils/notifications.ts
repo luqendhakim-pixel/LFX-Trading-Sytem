@@ -23,23 +23,37 @@ export function getNotificationPermission(): NotificationPermission {
   return Notification.permission;
 }
 
-// Trigger native OS/Browser notification if permitted
-export function sendBrowserPushNotification(
+// Trigger native OS/Browser notification if permitted (supports mobile background & status bar)
+export async function sendBrowserPushNotification(
   title: string,
   body: string,
   tag?: string
-): void {
+): Promise<void> {
   if (typeof window === "undefined" || !("Notification" in window)) return;
 
   if (Notification.permission === "granted") {
-    try {
-      const notif = new Notification(title, {
-        body,
-        icon: "/vite.svg",
-        tag: tag || `gold-signal-${Date.now()}`,
-        requireInteraction: false,
-      });
+    const notifOptions: any = {
+      body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      tag: tag || `gold-signal-${Date.now()}`,
+      vibrate: [200, 100, 200, 100, 300],
+      requireInteraction: false,
+      data: { url: "/" },
+    };
 
+    try {
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration && typeof registration.showNotification === "function") {
+          await registration.showNotification(title, notifOptions);
+          return;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const notif = new Notification(title, notifOptions);
       notif.onclick = () => {
         window.focus();
         notif.close();

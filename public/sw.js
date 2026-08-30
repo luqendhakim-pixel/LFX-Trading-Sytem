@@ -40,28 +40,63 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-  // Only intercept GET requests, skip /api/ dynamic calls to ensure live prices
-  if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
-    return;
+// Background Push & Mobile Status Bar Notification Support
+self.addEventListener('push', (event) => {
+  let data = {
+    title: '🚨 SINYAL XAU/USD BARU (LFX Trading System)',
+    body: 'Sinyal baru terkonfirmasi di terminal LFX. Buka aplikasi untuk rincian Entry, SL 50 pips, & TP1-4.',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: 'gold-signal-alert',
+    vibrate: [200, 100, 200, 100, 300],
+    data: { url: '/' }
+  };
+
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data.body = event.data.text();
+    }
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Fetch in background for freshness
-        fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(event.request, networkResponse.clone());
-              });
-            }
-          })
-          .catch(() => {});
-        return cachedResponse;
+  const options = {
+    body: data.body,
+    icon: data.icon || '/icon-192.png',
+    badge: data.badge || '/icon-192.png',
+    tag: data.tag || `lfx-signal-${Date.now()}`,
+    vibrate: data.vibrate || [200, 100, 200, 100, 300],
+    renotify: true,
+    requireInteraction: false,
+    data: data.data || { url: '/' },
+    actions: [
+      { action: 'open_signal', title: '📈 Buka Sinyal' },
+      { action: 'close', title: 'Tutup' }
+    ]
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  if (event.action === 'close') return;
+
+  const targetUrl = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
       }
-      return fetch(event.request);
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
     })
   );
 });
+

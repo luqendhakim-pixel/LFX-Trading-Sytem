@@ -212,23 +212,47 @@ class NotificationService {
     }
   }
 
-  // Send native mobile / browser push notification
-  sendMobilePush(title: string, options: { body: string; icon?: string; tag?: string }) {
+  // Send native mobile / browser push notification with background Service Worker support
+  async sendMobilePush(title: string, options: { body: string; icon?: string; tag?: string }) {
     this.playSignalAlertChime();
 
-    if (typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "granted") {
-        try {
-          new Notification(title, {
-            body: options.body,
-            icon: options.icon || "/favicon.ico",
-            tag: options.tag || "gold-signal-alert",
-            silent: false,
-          });
-        } catch (e) {
-          console.warn("Notification trigger error:", e);
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    const notifOptions: any = {
+      body: options.body,
+      icon: options.icon || "/icon-192.png",
+      badge: "/icon-192.png",
+      tag: options.tag || `gold-signal-${Date.now()}`,
+      vibrate: [200, 100, 200, 100, 300],
+      silent: false,
+      renotify: true,
+      requireInteraction: false,
+      data: { url: "/" },
+    };
+
+    // 1. Try Service Worker showNotification first (Works when minimized / locked screen on Mobile)
+    try {
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration && typeof registration.showNotification === "function") {
+          await registration.showNotification(title, notifOptions);
+          return;
         }
       }
+    } catch (swErr) {
+      console.warn("ServiceWorker showNotification fallback:", swErr);
+    }
+
+    // 2. Fallback to standard Window Notification
+    try {
+      const notif = new Notification(title, notifOptions);
+      notif.onclick = () => {
+        window.focus();
+        notif.close();
+      };
+    } catch (e) {
+      console.warn("Notification trigger error:", e);
     }
   }
 

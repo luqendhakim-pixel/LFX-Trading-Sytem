@@ -250,6 +250,264 @@ const INITIAL_SIGNALS: AISignal[] = [
       estimatedProfitTp3: 150.0,
     },
   },
+  {
+    id: "SIG-XAU-06",
+    symbol: "XAUUSD",
+    signalType: "BUY",
+    entryPrice: 4450.00,
+    stopLoss: 4445.00,
+    takeProfit1: 4455.00,
+    takeProfit2: 4460.00,
+    takeProfit3: 4465.00,
+    takeProfit4: 4470.00,
+    signalStatus: "SL HIT",
+    status: "COMPLETED",
+    realizedPips: -50,
+    closeResult: "LOSS",
+    riskRewardRatio: "1 : 1.0",
+    session: "New York",
+    entryZoneLow: 4449.00,
+    entryZoneHigh: 4451.00,
+    formattedTimeWib: "2026-08-27 20:15:00 WIB",
+    timestamp: "20:15",
+    timeframe: "H1",
+    trendDirection: "BULLISH",
+    strength: 78,
+    confidenceScore: 78,
+    primaryReason: "High Impact News Volatility Spike Triggered SL",
+    technicalFactors: ["News Volatility", "Liquidity Sweep"],
+    pipsSl: 50,
+    pipsTp1: 50,
+    pipsTp2: 100,
+    pipsTp3: 150,
+    pipsTp4: 200,
+    riskAssessment: {
+      recommendedLotSize: 0.1,
+      maxLossUsd: 50.0,
+      riskPercentage: 1,
+    },
+  },
+  {
+    id: "SIG-XAU-07",
+    symbol: "XAUUSD",
+    signalType: "SELL",
+    entryPrice: 4488.20,
+    stopLoss: 4493.20,
+    takeProfit1: 4483.20,
+    takeProfit2: 4478.20,
+    takeProfit3: 4473.20,
+    takeProfit4: 4468.20,
+    signalStatus: "BREAK EVEN",
+    status: "COMPLETED",
+    realizedPips: 0,
+    closeResult: "BE",
+    riskRewardRatio: "1 : 2.0",
+    session: "London",
+    entryZoneLow: 4487.00,
+    entryZoneHigh: 4489.00,
+    formattedTimeWib: "2026-08-26 15:45:00 WIB",
+    timestamp: "15:45",
+    timeframe: "H1",
+    trendDirection: "BEARISH",
+    strength: 84,
+    confidenceScore: 84,
+    primaryReason: "Price reached +30 pips then reversed to Entry (BE Protected)",
+    technicalFactors: ["BE Lock at +30p", "Session Close Reversal"],
+    pipsSl: 50,
+    pipsTp1: 50,
+    pipsTp2: 100,
+    pipsTp3: 150,
+    pipsTp4: 200,
+    riskAssessment: {
+      recommendedLotSize: 0.1,
+      maxLossUsd: 50.0,
+      riskPercentage: 1,
+    },
+  },
+  {
+    id: "SIG-XAU-08",
+    symbol: "XAUUSD",
+    signalType: "BUY",
+    entryPrice: 4435.50,
+    stopLoss: 4430.50,
+    takeProfit1: 4440.50,
+    takeProfit2: 4445.50,
+    takeProfit3: 4450.50,
+    takeProfit4: 4455.50,
+    signalStatus: "TP4 HIT",
+    status: "COMPLETED",
+    realizedPips: 200,
+    closeResult: "WIN",
+    riskRewardRatio: "1 : 4.0",
+    session: "Tokyo",
+    entryZoneLow: 4434.50,
+    entryZoneHigh: 4436.50,
+    formattedTimeWib: "2026-08-24 09:10:00 WIB",
+    timestamp: "09:10",
+    timeframe: "H1",
+    trendDirection: "BULLISH",
+    strength: 95,
+    confidenceScore: 95,
+    primaryReason: "Strong Institutional Bullish Order Block Full Target Run",
+    technicalFactors: ["Major Support", "ALMA Golden Slope", "High Volume Breakout"],
+    pipsSl: 50,
+    pipsTp1: 50,
+    pipsTp2: 100,
+    pipsTp3: 150,
+    pipsTp4: 200,
+    riskAssessment: {
+      recommendedLotSize: 0.1,
+      maxLossUsd: 50.0,
+      riskPercentage: 1,
+      estimatedProfitTp1: 50.0,
+      estimatedProfitTp2: 100.0,
+      estimatedProfitTp3: 150.0,
+      estimatedProfitTp4: 200.0,
+    },
+  },
+];
+
+const INITIAL_POSITIONS: Position[] = [
+  {
+    id: "POS-XAU-01",
+    symbol: "XAU/USD",
+    type: "BUY",
+    lotSize: 0.1,
+    entryPrice: 4500.50,
+    currentPrice: 4520.50,
+    stopLoss: 4495.50,
+    takeProfit: 4505.50,
+    takeProfit2: 4510.50,
+    takeProfit3: 4515.50,
+    status: "CLOSED",
+    pnlUsd: 200.0,
+    pnlPips: 200,
+    openTime: "2026-08-28 14:00 WIB",
+    closeTime: "2026-08-28 16:30 WIB",
+    strategy: "SMC Gold Strategy",
+    reason: "SMC Bullish Order Block + ALMA Golden Slope",
+    journal: {
+      notes: "Perfect entry saat retest demand zone London session.",
+      entryReason: "SMC Order Block + TSS Trend Filter Green",
+      emotionalState: "DISCIPLINED",
+      executionRating: 5,
+      lessonsLearned: "Sabar menunggu pullback ke OB memberikan R:R maksimal 1:4.",
+      tags: ["#SMC", "#OrderBlock", "#LondonSession", "#CleanWin"],
+      updatedAt: "2026-08-28 16:30 WIB",
+    },
+  },
+  {
+    id: "POS-XAU-02",
+    symbol: "XAU/USD",
+    type: "BUY",
+    lotSize: 0.1,
+    entryPrice: 4484.50,
+    currentPrice: 4499.50,
+    stopLoss: 4479.50,
+    takeProfit: 4489.50,
+    takeProfit2: 4494.50,
+    takeProfit3: 4499.50,
+    status: "CLOSED",
+    pnlUsd: 150.0,
+    pnlPips: 150,
+    openTime: "2026-08-28 12:30 WIB",
+    closeTime: "2026-08-28 14:15 WIB",
+    strategy: "SMC Gold Strategy",
+    reason: "London Breakout Impulsive Leg & TSS Bullish Momentum",
+    journal: {
+      notes: "Sinyal breakout terkonfirmasi kuat di M15 dan H1.",
+      entryReason: "Liquidity Grab Low Asia + Break of Structure",
+      emotionalState: "CONFIDENT",
+      executionRating: 5,
+      lessonsLearned: "Eksekusi disiplin dengan SL ketat 50 pips terbayar lunas.",
+      tags: ["#Breakout", "#LondonOpen", "#SMC"],
+      updatedAt: "2026-08-28 14:15 WIB",
+    },
+  },
+  {
+    id: "POS-XAU-03",
+    symbol: "XAU/USD",
+    type: "SELL",
+    lotSize: 0.1,
+    entryPrice: 4498.80,
+    currentPrice: 4488.80,
+    stopLoss: 4503.80,
+    takeProfit: 4493.80,
+    takeProfit2: 4488.80,
+    takeProfit3: 4483.80,
+    status: "CLOSED",
+    pnlUsd: 100.0,
+    pnlPips: 100,
+    openTime: "2026-08-28 10:15 WIB",
+    closeTime: "2026-08-28 11:45 WIB",
+    strategy: "SMC Gold Strategy",
+    reason: "Supply Zone Rejection Tokyo High & TSS Step Filter Breakdown",
+    journal: {
+      notes: "Rejection di high sesi Tokyo dengan konfirmasi divergensi RSI.",
+      entryReason: "Bearish Order Block & RSI Divergence",
+      emotionalState: "PATIENT",
+      executionRating: 4,
+      lessonsLearned: "Take Profit parsial di TP2 mengamankan +100 pips sebelum London open.",
+      tags: ["#SupplyZone", "#TokyoHigh", "#RSI"],
+      updatedAt: "2026-08-28 11:45 WIB",
+    },
+  },
+  {
+    id: "POS-XAU-04",
+    symbol: "XAU/USD",
+    type: "BUY",
+    lotSize: 0.1,
+    entryPrice: 4450.00,
+    currentPrice: 4445.00,
+    stopLoss: 4445.00,
+    takeProfit: 4455.00,
+    takeProfit2: 4460.00,
+    takeProfit3: 4465.00,
+    status: "CLOSED",
+    pnlUsd: -50.0,
+    pnlPips: -50,
+    openTime: "2026-08-27 20:15 WIB",
+    closeTime: "2026-08-27 20:22 WIB",
+    strategy: "SMC Gold Strategy",
+    reason: "High Impact News Volatility Spike Triggered SL",
+    journal: {
+      notes: "Entry terlalu dekat dengan rilis berita high-impact US Initial Jobless Claims.",
+      entryReason: "Mencoba entry sebelum news rilis (FOMO)",
+      emotionalState: "FOMO",
+      executionRating: 2,
+      lessonsLearned: "Wajib patuhi SOP: Berhenti trading 30 menit sebelum dan sesudah Red Folder News!",
+      tags: ["#RedFolderNews", "#SLHit", "#DisciplineReview"],
+      updatedAt: "2026-08-27 20:25 WIB",
+    },
+  },
+  {
+    id: "POS-XAU-05",
+    symbol: "XAU/USD",
+    type: "SELL",
+    lotSize: 0.1,
+    entryPrice: 4488.20,
+    currentPrice: 4488.20,
+    stopLoss: 4493.20,
+    takeProfit: 4483.20,
+    takeProfit2: 4478.20,
+    takeProfit3: 4473.20,
+    status: "CLOSED",
+    pnlUsd: 0.0,
+    pnlPips: 0,
+    openTime: "2026-08-26 15:45 WIB",
+    closeTime: "2026-08-26 16:30 WIB",
+    strategy: "SMC Gold Strategy",
+    reason: "Price reached +30 pips then reversed to Entry (BE Protected)",
+    journal: {
+      notes: "Harga running +30 pips lalu fitur Auto Break Even menggeser SL ke Entry.",
+      entryReason: "Break Even Lock at +30 Pips",
+      emotionalState: "DISCIPLINED",
+      executionRating: 5,
+      lessonsLearned: "Fitur BEP menyelamatkan akun dari potensi floating loss.",
+      tags: ["#BreakEven", "#ZeroRisk", "#Discipline"],
+      updatedAt: "2026-08-26 16:30 WIB",
+    },
+  },
 ];
 
 // Generate initial realistic OHLC gold candles
@@ -319,7 +577,14 @@ export default function App() {
 
   // 3. Signals & Market Data
   const [signalsList, setSignalsList] = useState<AISignal[]>(INITIAL_SIGNALS);
+  const [positions, setPositions] = useState<Position[]>(INITIAL_POSITIONS);
   const [currentSignal, setCurrentSignal] = useState<AISignal | null>(INITIAL_SIGNALS[0]);
+
+  const handleSaveJournal = (positionId: string, journal: TradeJournalData) => {
+    setPositions((prev) =>
+      prev.map((p) => (p.id === positionId ? { ...p, journal } : p))
+    );
+  };
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [candles, setCandles] = useState<Candle[]>(() => generateInitialGoldCandles(80, 4500.5));
   const [timeframe, setTimeframe] = useState<Timeframe>("H1");
@@ -792,10 +1057,14 @@ export default function App() {
             onSelectSignal={handleSelectSignalForDetail}
             signalsList={signalsList}
             currentSignal={currentSignal}
+            currentPrice={currentTick.price}
+            candles={candles}
             onOpenEducationModal={() => setIsEducationModalOpen(true)}
             onOpenContestModal={() => setIsContestModalOpen(true)}
             onRequestPushNotification={handleRequestPushNotification}
             pushNotificationEnabled={pushNotificationEnabled}
+            currentUser={currentUser}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
           />
         )}
 
@@ -836,7 +1105,7 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 4: INDIKATOR (TradingView Chart + Gauge + S/R Levels) */}
+        {/* VIEW 4: INDIKATOR (TradingView Chart + TSS Pine Script v6 Engine + Gauge + S/R Levels) */}
         {activeNavTab === "INDIKATOR" && (
           <TradingViewIndicatorsView
             timeframe={timeframe}
@@ -844,6 +1113,7 @@ export default function App() {
               setTimeframe(tf);
               triggerAiScan(tf, candles);
             }}
+            candles={candles}
             currentPrice={currentTick.price}
             currentSignal={currentSignal}
             onOpenLotSimulation={() => handleOpenLotSimulation(currentSignal || undefined)}

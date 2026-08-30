@@ -80,8 +80,8 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
       className="w-full max-w-lg md:max-w-3xl mx-auto pb-28 pt-2 px-3 sm:px-4 text-slate-100 space-y-4 animate-fadeIn"
     >
       {/* Brand Header Banner */}
-      <div className="flex items-center justify-between py-2 px-3 sm:px-4 rounded-2xl bg-[#060a15]/90 border border-slate-800/80 backdrop-blur-md">
-        <LfxLogo variant="full" className="h-8 sm:h-9" />
+      <div className="flex items-center justify-between py-2.5 px-3 sm:px-4 rounded-2xl bg-[#060a15]/90 border border-slate-800/80 backdrop-blur-md">
+        <LfxLogo variant="full" className="h-10 sm:h-11" />
         <span className="text-[11px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-md">
           v6.2 PRO
         </span>

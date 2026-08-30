@@ -1,13 +1,19 @@
 import React, { useState } from "react";
-import { LineChart, Sliders, Activity, Sparkles, ExternalLink, TrendingUp, TrendingDown, Layers } from "lucide-react";
+import {
+  LineChart,
+  Activity,
+  Zap,
+  Target,
+} from "lucide-react";
 import { TradingViewWidget } from "./TradingViewWidget";
-import { AISignal, Timeframe } from "../types";
+import { AISignal, Candle, Timeframe } from "../types";
 
 interface TradingViewIndicatorsViewProps {
   timeframe?: Timeframe;
   onTimeframeChange?: (tf: Timeframe) => void;
   currentPrice?: number;
   currentSignal?: AISignal | null;
+  candles?: Candle[];
   onOpenLotSimulation?: () => void;
 }
 
@@ -15,8 +21,6 @@ export const TradingViewIndicatorsView: React.FC<TradingViewIndicatorsViewProps>
   timeframe = "H1",
   onTimeframeChange,
   currentPrice = 4500.2,
-  currentSignal,
-  onOpenLotSimulation,
 }) => {
   const [selectedTf, setSelectedTf] = useState<Timeframe>(timeframe);
   const [activeSubTab, setActiveSubTab] = useState<"CHART" | "GAUGE" | "LEVELS">("CHART");
@@ -33,12 +37,17 @@ export const TradingViewIndicatorsView: React.FC<TradingViewIndicatorsViewProps>
   const sup1 = Number((baseP - 6.5).toFixed(3));
   const sup2 = Number((baseP - 15.0).toFixed(3));
 
+  const handleTimeframeSelect = (tf: Timeframe) => {
+    setSelectedTf(tf);
+    onTimeframeChange?.(tf);
+  };
+
   return (
     <div
       id="indicators-view"
       className="w-full max-w-lg md:max-w-4xl mx-auto pb-28 pt-2 px-3 sm:px-4 text-slate-100 space-y-4 animate-fadeIn"
     >
-      {/* Header */}
+      {/* 1. Header with Title & Tab Navigation */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
@@ -48,27 +57,30 @@ export const TradingViewIndicatorsView: React.FC<TradingViewIndicatorsViewProps>
           <p className="text-xs text-slate-400">Analisis multi-timeframe XAU/USD & Konfirmasi SMC</p>
         </div>
 
+        {/* Sub Tabs */}
         <div className="flex items-center gap-1 bg-[#090e1e] p-1 rounded-xl border border-slate-800 text-xs">
           <button
             onClick={() => setActiveSubTab("CHART")}
-            className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-              activeSubTab === "CHART" ? "bg-sky-500 text-slate-950 font-black" : "text-slate-400"
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+              activeSubTab === "CHART" ? "bg-sky-500 text-slate-950 font-black" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             Chart
           </button>
+
           <button
             onClick={() => setActiveSubTab("GAUGE")}
-            className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-              activeSubTab === "GAUGE" ? "bg-sky-500 text-slate-950 font-black" : "text-slate-400"
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+              activeSubTab === "GAUGE" ? "bg-sky-500 text-slate-950 font-black" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             Teknikal
           </button>
+
           <button
             onClick={() => setActiveSubTab("LEVELS")}
-            className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-              activeSubTab === "LEVELS" ? "bg-sky-500 text-slate-950 font-black" : "text-slate-400"
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+              activeSubTab === "LEVELS" ? "bg-sky-500 text-slate-950 font-black" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             Support/Resist
@@ -76,12 +88,12 @@ export const TradingViewIndicatorsView: React.FC<TradingViewIndicatorsViewProps>
         </div>
       </div>
 
-      {/* Timeframe selector */}
+      {/* 2. Timeframe Selector Bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
         {(["M1", "M5", "M15", "M30", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
           <button
             key={tf}
-            onClick={() => setSelectedTf(tf)}
+            onClick={() => handleTimeframeSelect(tf)}
             className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition cursor-pointer ${
               selectedTf === tf
                 ? "bg-sky-500 text-slate-950 font-black shadow"
@@ -93,109 +105,92 @@ export const TradingViewIndicatorsView: React.FC<TradingViewIndicatorsViewProps>
         ))}
       </div>
 
-      {/* Main Container */}
+      {/* 3. Main Chart Display */}
       {activeSubTab === "CHART" && (
         <div className="w-full h-[520px] rounded-3xl overflow-hidden border border-slate-800 bg-[#05070c] shadow-2xl">
           <TradingViewWidget symbol="OANDA:XAUUSD" theme="dark" timeframe={selectedTf} />
         </div>
       )}
 
+      {/* 4. GAUGE Sub Tab */}
       {activeSubTab === "GAUGE" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="p-4 rounded-2xl bg-[#090e1e] border border-slate-800 space-y-3 font-mono">
             <h4 className="text-xs font-sans font-bold text-slate-300 uppercase tracking-wider">
-              Oscillators & Momentum
+              Moving Averages & ALMA
             </h4>
             <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between p-2 rounded-xl bg-[#050813]">
-                <span className="text-slate-400">RSI (14)</span>
-                <span className="text-emerald-400 font-bold">58.4 (Bullish Zone)</span>
+              <div className="flex justify-between items-center p-2 rounded-xl bg-[#0e172e]">
+                <span className="text-slate-400">ALMA (Len 5, Offset 0.5):</span>
+                <span className="font-bold text-emerald-400">${almaVal} (Bullish)</span>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-[#050813]">
-                <span className="text-slate-400">Stochastic (14,3,3)</span>
-                <span className="text-cyan-400 font-bold">62.1 (Neutral / Up)</span>
+              <div className="flex justify-between items-center p-2 rounded-xl bg-[#0e172e]">
+                <span className="text-slate-400">EMA 20:</span>
+                <span className="font-bold text-emerald-400">${ema20Val}</span>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-[#050813]">
-                <span className="text-slate-400">MACD Histogram</span>
-                <span className="text-emerald-400 font-bold">+1.84 (Bullish Crossover)</span>
+              <div className="flex justify-between items-center p-2 rounded-xl bg-[#0e172e]">
+                <span className="text-slate-400">EMA 50:</span>
+                <span className="font-bold text-emerald-400">${ema50Val}</span>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-[#050813]">
-                <span className="text-slate-400">ATR (14) Volatilitas</span>
-                <span className="text-amber-400 font-bold">3.20 USD (32 Pips/Bar)</span>
+              <div className="flex justify-between items-center p-2 rounded-xl bg-[#0e172e]">
+                <span className="text-slate-400">EMA 200:</span>
+                <span className="font-bold text-emerald-400">${ema200Val}</span>
               </div>
             </div>
           </div>
 
           <div className="p-4 rounded-2xl bg-[#090e1e] border border-slate-800 space-y-3 font-mono">
             <h4 className="text-xs font-sans font-bold text-slate-300 uppercase tracking-wider">
-              Moving Averages & Trend Filter
+              Oscillators & Momentum
             </h4>
             <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between p-2 rounded-xl bg-[#050813]">
-                <span className="text-slate-400">EMA 20</span>
-                <span className="text-emerald-400 font-bold">{ema20Val.toFixed(2)} (BUY)</span>
+              <div className="flex justify-between items-center p-2 rounded-xl bg-[#0e172e]">
+                <span className="text-slate-400">RSI (14):</span>
+                <span className="font-bold text-emerald-400">62.4 (Bullish Zone)</span>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-[#050813]">
-                <span className="text-slate-400">EMA 50</span>
-                <span className="text-emerald-400 font-bold">{ema50Val.toFixed(2)} (BUY)</span>
+              <div className="flex justify-between items-center p-2 rounded-xl bg-[#0e172e]">
+                <span className="text-slate-400">Stochastic (14, 3, 3):</span>
+                <span className="font-bold text-cyan-400">68.2 (Neutral)</span>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-[#050813]">
-                <span className="text-slate-400">EMA 200 (Major Trend)</span>
-                <span className="text-emerald-400 font-bold">{ema200Val.toFixed(2)} (STRONG BULL)</span>
+              <div className="flex justify-between items-center p-2 rounded-xl bg-[#0e172e]">
+                <span className="text-slate-400">MACD (12, 26, 9):</span>
+                <span className="font-bold text-emerald-400">+2.45 (Golden Cross)</span>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-[#050813]">
-                <span className="text-slate-400">Step ALMA Filter</span>
-                <span className="text-cyan-400 font-bold">{almaVal.toFixed(2)} (Support Line)</span>
+              <div className="flex justify-between items-center p-2 rounded-xl bg-[#0e172e]">
+                <span className="text-slate-400">ADX (14):</span>
+                <span className="font-bold text-amber-400">32.8 (Strong Trend)</span>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* 5. Support & Resistance Sub Tab */}
       {activeSubTab === "LEVELS" && (
         <div className="p-4 rounded-2xl bg-[#090e1e] border border-slate-800 space-y-3 font-mono text-xs">
           <h4 className="text-xs font-sans font-bold text-slate-300 uppercase tracking-wider">
-            Order Blocks & Key Fibonacci Levels (XAU/USD)
+            Pivot Points & Key Levels (XAU/USD)
           </h4>
           <div className="space-y-2">
-            <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-600/30 flex items-center justify-between">
-              <div>
-                <div className="text-rose-400 font-bold">Resistance 2 (Major Supply)</div>
-                <div className="text-[10px] text-slate-400">H4 Liquidity Sweep Area</div>
-              </div>
-              <div className="text-sm font-black text-rose-300">{res2.toFixed(3)}</div>
+            <div className="flex justify-between p-2 rounded-xl bg-rose-950/40 border border-rose-800/40 text-rose-300">
+              <span>Resistance 2 (R2):</span>
+              <span className="font-bold">${res2}</span>
             </div>
-
-            <div className="p-2.5 rounded-xl bg-rose-950/20 border border-rose-600/20 flex items-center justify-between">
-              <div>
-                <div className="text-rose-300 font-bold">Resistance 1 (Local High)</div>
-                <div className="text-[10px] text-slate-400">Previous Day High (PDH)</div>
-              </div>
-              <div className="text-sm font-black text-rose-200">{res1.toFixed(3)}</div>
+            <div className="flex justify-between p-2 rounded-xl bg-rose-950/20 border border-rose-900/30 text-rose-400">
+              <span>Resistance 1 (R1):</span>
+              <span className="font-bold">${res1}</span>
             </div>
-
-            <div className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 flex items-center justify-between">
-              <div>
-                <div className="text-cyan-300 font-bold">Current Equilibrium (Pivot)</div>
-                <div className="text-[10px] text-slate-400">Daily VWAP & Fair Value</div>
-              </div>
-              <div className="text-sm font-black text-cyan-200">{pivot.toFixed(3)}</div>
+            <div className="flex justify-between p-2 rounded-xl bg-sky-950/40 border border-sky-800/40 text-sky-300">
+              <span>Daily Pivot (P):</span>
+              <span className="font-bold">${pivot}</span>
             </div>
-
-            <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-600/20 flex items-center justify-between">
-              <div>
-                <div className="text-emerald-300 font-bold">Support 1 (Demand OB)</div>
-                <div className="text-[10px] text-slate-400">H1 Bullish Order Block</div>
-              </div>
-              <div className="text-sm font-black text-emerald-200">{sup1.toFixed(3)}</div>
+            <div className="flex justify-between p-2 rounded-xl bg-emerald-950/20 border border-emerald-900/30 text-emerald-400">
+              <span>Support 1 (S1):</span>
+              <span className="font-bold">${sup1}</span>
             </div>
-
-            <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-600/30 flex items-center justify-between">
-              <div>
-                <div className="text-emerald-400 font-bold">Support 2 (Major FVG)</div>
-                <div className="text-[10px] text-slate-400">Daily Fair Value Gap</div>
-              </div>
-              <div className="text-sm font-black text-emerald-300">{sup2.toFixed(3)}</div>
+            <div className="flex justify-between p-2 rounded-xl bg-emerald-950/40 border border-emerald-800/40 text-emerald-300">
+              <span>Support 2 (S2):</span>
+              <span className="font-bold">${sup2}</span>
             </div>
           </div>
         </div>

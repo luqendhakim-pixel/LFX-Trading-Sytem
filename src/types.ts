@@ -73,6 +73,7 @@ export interface RiskAssessment {
   estimatedProfitTp1?: number;
   estimatedProfitTp2?: number;
   estimatedProfitTp3?: number;
+  estimatedProfitTp4?: number;
   warningNote?: string;
 }
 

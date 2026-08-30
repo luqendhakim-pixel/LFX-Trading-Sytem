@@ -216,9 +216,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         )}
 
         {/* Header Branding */}
-        <div className="flex flex-col items-center text-center space-y-2 mb-5">
-          <LfxLogo variant="full" className="h-10" />
-          <p className="text-xs text-slate-400 max-w-xs">
+        <div className="flex flex-col items-center text-center space-y-2.5 mb-6">
+          <div className="p-2 rounded-2xl bg-[#060b17]/80 border border-slate-800 shadow-inner flex items-center justify-center">
+            <LfxLogo variant="full" className="h-14 sm:h-16" />
+          </div>
+          <p className="text-xs text-slate-300 font-medium max-w-xs">
             Sistem Autentikasi & Keamanan Sinyal XAU/USD
           </p>
         </div>

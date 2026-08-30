@@ -5,6 +5,7 @@ import {
   Smartphone,
   X,
   TrendingUp,
+  TrendingDown,
   BookOpen,
   Trophy,
   Bitcoin,
@@ -15,22 +16,42 @@ import {
   DollarSign,
   ShieldCheck,
   Activity,
+  Target,
+  Scale,
+  Calendar,
+  BarChart3,
+  CheckCircle2,
+  XCircle,
+  Layers,
 } from "lucide-react";
-import { AISignal, Timeframe } from "../types";
+import { AISignal, Timeframe, UserProfile, Candle } from "../types";
 import { TradingViewWidget } from "./TradingViewWidget";
 import { LfxLogo } from "./LfxLogo";
+import { SignalWinRateHistoryModal } from "./SignalWinRateHistoryModal";
+import { EconomicNewsCalendar } from "./EconomicNewsCalendar";
+import { MultiTimeframeConfluenceGrid } from "./MultiTimeframeConfluenceGrid";
+import {
+  calculateDynamicHistoryWinRate,
+  PeriodFilter,
+} from "../utils/winratePipsCalculator";
+
+import { NavTab } from "./MobileAppNav";
 
 interface HomeDashboardViewProps {
   onOpenNotifications: () => void;
   onOpenSettings: () => void;
-  onNavigateToTab: (tab: "BERANDA" | "SIGNAL" | "CHAT" | "INDIKATOR" | "AKUN") => void;
+  onNavigateToTab: (tab: NavTab) => void;
   onSelectSignal: (signal: AISignal) => void;
   signalsList: AISignal[];
   currentSignal: AISignal | null;
+  currentPrice?: number;
+  candles?: Candle[];
   onOpenEducationModal: () => void;
   onOpenContestModal: () => void;
   onRequestPushNotification: () => void;
   pushNotificationEnabled: boolean;
+  currentUser?: UserProfile | null;
+  onOpenAuthModal?: () => void;
 }
 
 export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
@@ -40,67 +61,44 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   onSelectSignal,
   signalsList,
   currentSignal,
+  currentPrice = 4454.50,
+  candles,
   onOpenEducationModal,
   onOpenContestModal,
   onRequestPushNotification,
   pushNotificationEnabled,
+  currentUser,
+  onOpenAuthModal,
 }) => {
   const [showAndroidBanner, setShowAndroidBanner] = useState(true);
+  const [activeWinRatePeriod, setActiveWinRatePeriod] = useState<PeriodFilter>("DAILY");
+  const [isWinRateModalOpen, setIsWinRateModalOpen] = useState(false);
+  const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
+  const [selectedTf, setSelectedTf] = useState<Timeframe>("H1");
 
-  // Calculate actual Performance Metrics strictly from closed/historical signals
-  const closedSignals = useMemo(() => {
-    return signalsList.filter((s) => s.signalStatus !== "ACTIVE" && s.status !== "ACTIVE");
+  const isAdmin =
+    currentUser?.role === "ADMIN" ||
+    currentUser?.identifier === "luqendhakim@gmail.com" ||
+    currentUser?.identifier === "08123456789";
+
+  // Dynamic Winrate, Pips Profit/Loss, Hit TP/SL/BE calculations for all periods
+  const dynamicHistory = useMemo(() => {
+    return calculateDynamicHistoryWinRate(signalsList);
   }, [signalsList]);
 
-  const { totalPips, winRatePercent, closedCount } = useMemo(() => {
-    let pipsSum = 0;
-    let winCount = 0;
-
-    closedSignals.forEach((sig) => {
-      let pips = 0;
-      if (typeof sig.realizedPips === "number") {
-        pips = sig.realizedPips;
-      } else {
-        // Fallback based on signalStatus
-        switch (sig.signalStatus) {
-          case "TP1 HIT":
-            pips = sig.pipsTp1 || 50;
-            break;
-          case "TP2 HIT":
-            pips = sig.pipsTp2 || 100;
-            break;
-          case "TP3 HIT":
-            pips = sig.pipsTp3 || 150;
-            break;
-          case "SL HIT":
-            pips = -(sig.pipsSl || 50);
-            break;
-          case "BREAK EVEN":
-            pips = 0;
-            break;
-          case "CLOSED":
-          default:
-            pips = 0;
-            break;
-        }
-      }
-
-      pipsSum += pips;
-      if (pips > 0 || sig.closeResult === "WIN") {
-        winCount++;
-      }
-    });
-
-    const totalCount = closedSignals.length;
-    const rate = totalCount > 0 ? Math.round((winCount / totalCount) * 100) : 0;
-
-    return {
-      totalPips: pipsSum,
-      winRatePercent: rate,
-      closedCount: totalCount,
-    };
-  }, [closedSignals]);
-  const [selectedTf, setSelectedTf] = useState<Timeframe>("H1");
+  const activeMetrics = useMemo(() => {
+    switch (activeWinRatePeriod) {
+      case "DAILY":
+        return dynamicHistory.daily;
+      case "WEEKLY":
+        return dynamicHistory.weekly;
+      case "MONTHLY":
+        return dynamicHistory.monthly;
+      case "ALL":
+      default:
+        return dynamicHistory.allTime;
+    }
+  }, [dynamicHistory, activeWinRatePeriod]);
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -126,12 +124,20 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
       id="home-dashboard-view"
       className="w-full max-w-lg md:max-w-3xl mx-auto pb-28 pt-2 px-3 sm:px-4 text-slate-100 space-y-4 animate-fadeIn"
     >
+      {/* Dynamic Winrate & Pips History Modal */}
+      <SignalWinRateHistoryModal
+        isOpen={isWinRateModalOpen}
+        onClose={() => setIsWinRateModalOpen(false)}
+        signalsList={signalsList}
+        onSelectSignal={onSelectSignal}
+      />
+
       {/* 0. Top Main Brand Header Bar with LFX Logo */}
       <div className="flex items-center justify-between py-2 px-3 sm:px-4 rounded-2xl bg-[#060a15]/90 border border-slate-800/80 backdrop-blur-md shadow-lg">
         {/* Left: LFX TRADING SYSTEM Official Logo */}
         <div className="flex items-center gap-3">
           <div className="relative group cursor-pointer" onClick={() => onNavigateToTab("BERANDA")}>
-            <LfxLogo variant="full" className="h-9 sm:h-10 transition-transform group-hover:scale-105" />
+            <LfxLogo variant="full" className="h-11 sm:h-12 transition-transform group-hover:scale-105" />
           </div>
         </div>
 
@@ -153,52 +159,180 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
           </button>
 
+          {/* Settings Button - Only displayed for ADMIN */}
+          {isAdmin && (
+            <button
+              id="btn-top-settings"
+              onClick={onOpenSettings}
+              className="p-2 rounded-xl bg-[#0e1529] border border-amber-500/40 text-amber-300 hover:text-white hover:border-amber-400 transition cursor-pointer"
+              title="Pengaturan Akun & Exness (Akses Admin)"
+            >
+              <Settings className="w-4 h-4 text-amber-400" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 1. User Profile Greeting Bar & Dynamic Winrate History Menu */}
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 px-1">
+        {/* Left: User Avatar & Name (Conditional Admin / Member / Guest) */}
+        <div className="flex items-center gap-3">
+          {isAdmin ? (
+            <>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 via-cyan-500 to-emerald-400 p-0.5 shadow-md flex items-center justify-center shrink-0">
+                <div className="w-full h-full bg-[#070c1e] rounded-full flex items-center justify-center text-amber-300 font-black text-sm">
+                  LH
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h2 className="text-sm sm:text-base font-black text-white tracking-tight">
+                    Halo, LuqendIbnuHakim
+                  </h2>
+                  <span className="px-1.5 py-0.2 text-[9px] font-black uppercase rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 tracking-wider">
+                    ADMIN
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-mono">lu••••••••@gmail.com</p>
+              </div>
+            </>
+          ) : currentUser ? (
+            <>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 via-indigo-600 to-purple-500 p-0.5 shadow-md flex items-center justify-center shrink-0">
+                <div className="w-full h-full bg-[#070c1e] rounded-full flex items-center justify-center text-cyan-400 font-black text-sm">
+                  {currentUser.name ? currentUser.name.slice(0, 2).toUpperCase() : "MB"}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h2 className="text-sm sm:text-base font-black text-white tracking-tight">
+                    Halo, {currentUser.name || "Member Trader"}
+                  </h2>
+                  <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                    {currentUser.status === "SUBSCRIBED" ? "PRO MEMBER" : "TRIAL MEMBER"}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-mono">
+                  {currentUser.identifier.includes("@")
+                    ? `${currentUser.identifier.slice(0, 2)}••••••••@${currentUser.identifier.split("@")[1]}`
+                    : `${currentUser.identifier.slice(0, 4)}••••••${currentUser.identifier.slice(-2)}`}
+                </p>
+              </div>
+            </>
+          ) : (
+            <div
+              className="flex items-center gap-3 cursor-pointer group"
+              onClick={onOpenAuthModal}
+            >
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 to-emerald-500 p-0.5 shadow-md flex items-center justify-center shrink-0">
+                <div className="w-full h-full bg-[#070c1e] rounded-full flex items-center justify-center text-cyan-400 font-black text-xs">
+                  LFX
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h2 className="text-sm sm:text-base font-black text-white tracking-tight group-hover:text-cyan-300 transition">
+                    LFX Trading System
+                  </h2>
+                  <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase rounded bg-slate-800 text-slate-300 border border-slate-700">
+                    MASUK
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">Signal & AI Technical Gold Analysis</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right (Red Box Area): Dynamic Winrate & Pips History Menu */}
+        <div
+          id="winrate-history-menu-bar"
+          className="flex items-center gap-1.5 bg-[#070e1c] border border-cyan-500/30 hover:border-cyan-500/60 p-1.5 rounded-2xl shadow-xl backdrop-blur-md transition group"
+        >
+          {/* Quick Period Selector Tabs */}
+          <div className="flex items-center bg-[#040812] rounded-xl p-0.5 border border-slate-800">
+            {(["DAILY", "WEEKLY", "MONTHLY"] as PeriodFilter[]).map((periodKey) => {
+              const isSelected = activeWinRatePeriod === periodKey;
+              const shortLabel = periodKey === "DAILY" ? "Daily" : periodKey === "WEEKLY" ? "Weekly" : "Monthly";
+              return (
+                <button
+                  key={periodKey}
+                  onClick={() => setActiveWinRatePeriod(periodKey)}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                    isSelected
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent"
+                  }`}
+                >
+                  {shortLabel}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Detailed History Modal Open Button */}
           <button
-            id="btn-top-settings"
-            onClick={onOpenSettings}
-            className="p-2 rounded-xl bg-[#0e1529] border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition cursor-pointer"
-            title="Pengaturan Akun & Exness"
+            onClick={() => setIsWinRateModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-950/60 to-cyan-950/60 border border-emerald-500/40 hover:border-cyan-400 text-xs font-black text-emerald-400 hover:text-cyan-300 transition shadow cursor-pointer"
+            title="Buka Rincian Riwayat Winrate & Pips"
           >
-            <Settings className="w-4 h-4" />
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-mono">
+              {activeMetrics.netPips >= 0 ? `+${activeMetrics.netPips}p` : `${activeMetrics.netPips}p`}
+            </span>
+            <span className="text-[10px] text-cyan-300 font-sans font-bold">
+              ({activeMetrics.winRatePercent}%)
+            </span>
+            <BarChart3 className="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition" />
           </button>
         </div>
       </div>
 
-      {/* 1. User Profile Greeting Bar */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-3">
-          {/* Avatar Icon */}
-          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 via-indigo-600 to-purple-500 p-0.5 shadow-md flex items-center justify-center">
-            <div className="w-full h-full bg-[#070c1e] rounded-full flex items-center justify-center text-cyan-400 font-black text-sm">
-              LH
-            </div>
-          </div>
-
-          <div>
-            <h2 className="text-sm sm:text-base font-black text-white tracking-tight">
-              Halo, LuqendIbnuHakim
-            </h2>
-            <p className="text-xs text-slate-400 font-mono">lu••••••••@gmail.com</p>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Card Banner: PERFORMA SINYAL */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c1630] via-[#091124] to-[#060a16] border border-slate-800/90 p-4 sm:p-5 shadow-2xl">
+      {/* 2. Card Banner: PERFORMA SINYAL (Dynamically linked to selected period) */}
+      <div
+        onClick={() => setIsWinRateModalOpen(true)}
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c1630] via-[#091124] to-[#060a16] border border-slate-800/90 hover:border-cyan-500/40 p-4 sm:p-5 shadow-2xl transition cursor-pointer group"
+      >
         <div className="relative z-10 flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-              PERFORMA SINYAL
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+                PERFORMA SINYAL ({activeMetrics.label.toUpperCase()})
+              </span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+                Klik Rincian
+              </span>
             </div>
             <div className="text-xs text-slate-400 mt-1">
-              {winRatePercent}% winrate • {closedCount} sinyal close
+              {activeMetrics.winRatePercent}% winrate • {activeMetrics.totalClosedSignals} sinyal close
+            </div>
+
+            {/* Quick Hit Counter Badges */}
+            <div className="flex items-center gap-2 mt-2 flex-wrap text-[10px] font-mono font-bold">
+              <span className="px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> TP: {activeMetrics.totalHitTpCount}x (+{activeMetrics.profitPips}p)
+              </span>
+              <span className="px-2 py-0.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center gap-1">
+                <XCircle className="w-3 h-3" /> SL: {activeMetrics.hitSlCount}x (-{activeMetrics.lossPips}p)
+              </span>
+              <span className="px-2 py-0.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300 flex items-center gap-1">
+                <Scale className="w-3 h-3" /> BE: {activeMetrics.hitBeCount}x
+              </span>
             </div>
           </div>
+
           <div className="text-right">
             <div className={`text-2xl sm:text-3xl font-black tracking-tight ${
-              totalPips >= 0 ? "text-emerald-400" : "text-rose-400"
+              activeMetrics.netPips >= 0 ? "text-emerald-400" : "text-rose-400"
             }`}>
-              {totalPips >= 0 ? `+${totalPips.toLocaleString()}` : totalPips.toLocaleString()} pips
+              {activeMetrics.netPips >= 0 ? `+${activeMetrics.netPips.toLocaleString()}` : activeMetrics.netPips.toLocaleString()} pips
+            </div>
+            <div className="text-[11px] text-slate-400 mt-0.5 flex items-center justify-end gap-1 group-hover:text-cyan-300 transition">
+              <span>Lihat Detail</span>
+              <ChevronRight className="w-3.5 h-3.5" />
             </div>
           </div>
         </div>
@@ -227,6 +361,26 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Modal: Full Economic News Calendar */}
+      {isNewsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-[#080d1a] border border-slate-700 shadow-2xl p-1">
+            <button
+              onClick={() => setIsNewsModalOpen(false)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <EconomicNewsCalendar onClose={() => setIsNewsModalOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* 2.6 Red Folder News Live Volatility Status Bar */}
+      <div onClick={() => setIsNewsModalOpen(true)} className="cursor-pointer">
+        <EconomicNewsCalendar compact={true} />
+      </div>
+
       {/* 3. Android App / Realtime Push Notification Banner */}
       {showAndroidBanner && (
         <div className="relative flex items-center justify-between p-3 sm:p-3.5 bg-[#0f172a]/90 border border-amber-500/30 rounded-2xl shadow-lg">
@@ -236,10 +390,10 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
             </div>
             <div>
               <h4 className="text-xs sm:text-sm font-bold text-white">
-                Pasang Aplikasi Android & Notifikasi HP
+                Notifikasi Sinyal Bilah Status HP (WhatsApp-Style)
               </h4>
               <p className="text-[11px] text-slate-400">
-                Lebih cepat, hemat data & notifikasi sinyal realtime
+                Muncul di lockscreen & bar notifikasi HP saat diminimize
               </p>
             </div>
           </div>
@@ -302,6 +456,13 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
           <TradingViewWidget symbol="OANDA:XAUUSD" theme="dark" timeframe={selectedTf} />
         </div>
       </div>
+
+      {/* 5. Matrix Konfluensi Multi-Timeframe (M1 - D1 Grid) */}
+      <MultiTimeframeConfluenceGrid
+        currentPrice={currentPrice}
+        selectedTimeframe={selectedTf}
+        onSelectTimeframe={(tf) => setSelectedTf(tf)}
+      />
 
       {/* 6. Section: Signal Terbaru */}
       <div className="space-y-2.5">

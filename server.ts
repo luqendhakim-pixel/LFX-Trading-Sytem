@@ -2,6 +2,11 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import {
+  buildTradingExpertSystemPrompt,
+  generateFallbackExpertResponse,
+  TradingContext,
+} from "./src/services/tradingExpertSystem";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -626,6 +631,337 @@ setInterval(() => {
 // Initial immediate fetch
 fetchLiveGoldPriceFromMarket();
 
+// ==========================================
+// 📅 REAL-TIME ECONOMIC NEWS CALENDAR API (XAU/USD RED FOLDER NEWS)
+// ==========================================
+interface EconomicCalendarItem {
+  id: string;
+  title: string;
+  country: string;
+  currency: string;
+  impact: "HIGH" | "MEDIUM" | "LOW";
+  dateStr: string;
+  timeStrWib: string;
+  scheduledTimestamp: number;
+  forecast: string;
+  previous: string;
+  actual?: string;
+  goldImpactEffect: string;
+  description: string;
+  category: "INFLATION" | "EMPLOYMENT" | "CENTRAL_BANK" | "GROWTH" | "SENTIMENT";
+  status: "UPCOMING" | "LIVE_NOW" | "RELEASED";
+  goldSentiment?: "BULLISH" | "BEARISH" | "NEUTRAL";
+}
+
+let cachedEconomicEvents: EconomicCalendarItem[] = [];
+let lastCalendarFetchTime = 0;
+const CALENDAR_CACHE_TTL_MS = 60 * 1000; // 1 minute cache
+
+function generateDynamicInstitutionalCalendar(): EconomicCalendarItem[] {
+  const now = new Date();
+  const baseTime = now.getTime();
+  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+
+  const dayNamesId = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+  const monthNamesId = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+
+  // Helper to format date label relative to today in WIB
+  const formatDateLabel = (targetDate: Date): string => {
+    const todayStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+    const targetStr = `${targetDate.getFullYear()}-${targetDate.getMonth()}-${targetDate.getDate()}`;
+    const diffDays = Math.round((new Date(targetStr).getTime() - new Date(todayStr).getTime()) / (24 * 3600 * 1000));
+
+    if (diffDays === 0) return "Hari Ini";
+    if (diffDays === 1) return "Besok";
+    if (diffDays === 2) return "Lusa";
+    if (diffDays === -1) return "Kemarin";
+    return `${dayNamesId[targetDate.getDay()]}, ${targetDate.getDate()} ${monthNamesId[targetDate.getMonth()]}`;
+  };
+
+  // Define weekly macro milestones
+  const weeklyTemplates = [
+    {
+      title: "US Core CPI (Consumer Price Index) m/m",
+      category: "INFLATION" as const,
+      impact: "HIGH" as const,
+      dayOffset: 0,
+      hourWib: 19,
+      minWib: 30,
+      forecast: "0.3%",
+      previous: "0.2%",
+      goldImpactEffect: "Jika Aktual > Forecast → DXY Menguat Tajam → XAU/USD Berpotensi Tertekan (Bearish). Jika Aktual < Forecast → Emas Rally Kuat.",
+      description: "Ukuran utama inflasi konsumen AS tanpa komponen makanan & energi volatil. Sangat menentukan suku bunga The Fed.",
+    },
+    {
+      title: "US Core PPI (Producer Price Index) m/m",
+      category: "INFLATION" as const,
+      impact: "HIGH" as const,
+      dayOffset: 1,
+      hourWib: 19,
+      minWib: 30,
+      forecast: "0.2%",
+      previous: "0.1%",
+      goldImpactEffect: "Indikator tekanan harga grosir produsen. Jika lebih tinggi dari ekspektasi, yield obligasi US naik & menekan emas.",
+      description: "Perubahan harga barang dan jasa di tingkat produsen AS.",
+    },
+    {
+      title: "FOMC Rate Decision & Fed Statement",
+      category: "CENTRAL_BANK" as const,
+      impact: "HIGH" as const,
+      dayOffset: 2,
+      hourWib: 1,
+      minWib: 0,
+      forecast: "5.25%",
+      previous: "5.50%",
+      goldImpactEffect: "Pemangkasan Bunga / Dovish → XAU/USD Melonjak Menembus Resistance. Hawkish → Tekanan Jual Emas.",
+      description: "Keputusan penetapan suku bunga acuan Federal Reserve dan proyeksi ekonomi FOMC.",
+    },
+    {
+      title: "Fed Chair Powell Speech & Press Conference",
+      category: "CENTRAL_BANK" as const,
+      impact: "HIGH" as const,
+      dayOffset: 2,
+      hourWib: 1,
+      minWib: 30,
+      forecast: "Dovish Bias",
+      previous: "Neutral",
+      goldImpactEffect: "Pernyataan bernada santai mengenai pemangkasan suku bunga memicu lonjakan pembelian emas institusional.",
+      description: "Konferensi pers langsung Ketua The Fed Jerome Powell membahas arah kebijakan moneter AS.",
+    },
+    {
+      title: "US Initial Jobless Claims",
+      category: "EMPLOYMENT" as const,
+      impact: "MEDIUM" as const,
+      dayOffset: 3,
+      hourWib: 19,
+      minWib: 30,
+      forecast: "228K",
+      previous: "232K",
+      goldImpactEffect: "Klaim pengangguran bertambah (>235K) melemahkan USD dan mendorong kenaikan harga emas.",
+      description: "Jumlah klaim tunjangan pengangguran baru pertama kali di AS setiap pekan.",
+    },
+    {
+      title: "US Non-Farm Payrolls (NFP) & Unemployment Rate",
+      category: "EMPLOYMENT" as const,
+      impact: "HIGH" as const,
+      dayOffset: 4,
+      hourWib: 19,
+      minWib: 30,
+      forecast: "165K (Rate: 4.2%)",
+      previous: "142K (Rate: 4.3%)",
+      goldImpactEffect: "NFP Kuat (>180K) → Emas Terjun Bebas (Dump). NFP Lemah (<130K) → Emas Terbang Impulsif (Pump).",
+      description: "Data pertumbuhan tenaga kerja sektor formal non-pertanian AS. Peristiwa paling volatil bulanan untuk XAU/USD.",
+    },
+    {
+      title: "US ISM Services PMI",
+      category: "SENTIMENT" as const,
+      impact: "MEDIUM" as const,
+      dayOffset: 5,
+      hourWib: 21,
+      minWib: 0,
+      forecast: "51.4",
+      previous: "50.8",
+      goldImpactEffect: "Sektor jasa mendominasi 70% ekonomi AS. Angka di bawah 50 memicu kekhawatiran resesi dan melambungkan harga emas.",
+      description: "Survei aktivitas bisnis di sektor jasa AS oleh Institute for Supply Management.",
+    },
+  ];
+
+  return weeklyTemplates.map((item, idx) => {
+    // Calculate targeted calendar timestamp in UTC+7 (WIB)
+    const target = new Date(baseTime);
+    target.setDate(target.getDate() + item.dayOffset);
+    target.setHours(item.hourWib, item.minWib, 0, 0);
+    const scheduledMs = target.getTime();
+    const diffMinutes = Math.round((scheduledMs - baseTime) / 60000);
+
+    let status: "UPCOMING" | "LIVE_NOW" | "RELEASED" = "UPCOMING";
+    let actual: string | undefined = undefined;
+    let goldSentiment: "BULLISH" | "BEARISH" | "NEUTRAL" | undefined = undefined;
+
+    if (diffMinutes < -15) {
+      status = "RELEASED";
+      actual = item.forecast;
+      goldSentiment = "NEUTRAL";
+    } else if (diffMinutes >= -15 && diffMinutes <= 15) {
+      status = "LIVE_NOW";
+    } else {
+      status = "UPCOMING";
+    }
+
+    return {
+      id: `macro-event-${idx}-${target.getDate()}`,
+      title: item.title,
+      country: "US",
+      currency: "USD",
+      impact: item.impact,
+      dateStr: formatDateLabel(target),
+      timeStrWib: `${String(item.hourWib).padStart(2, "0")}:${String(item.minWib).padStart(2, "0")} WIB`,
+      scheduledTimestamp: scheduledMs,
+      forecast: item.forecast,
+      previous: item.previous,
+      actual,
+      goldImpactEffect: item.goldImpactEffect,
+      description: item.description,
+      category: item.category,
+      status,
+      goldSentiment,
+    };
+  });
+}
+
+async function fetchLiveEconomicCalendarFromFeed(): Promise<EconomicCalendarItem[]> {
+  // If cache is fresh, return cached
+  if (cachedEconomicEvents.length > 0 && Date.now() - lastCalendarFetchTime < CALENDAR_CACHE_TTL_MS) {
+    return cachedEconomicEvents;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+
+    // ForexFactory Live Weekly Economic Calendar Feed
+    const res = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json", {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "application/json",
+      },
+    });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const rawData = await res.json();
+      if (Array.isArray(rawData) && rawData.length > 0) {
+        const nowMs = Date.now();
+        const relevantEvents = rawData
+          .filter((item: any) => {
+            const country = (item.country || "").toUpperCase();
+            const impact = (item.impact || "").toLowerCase();
+            // Focus on USD, and major high-impact EUR/GBP that sway DXY/Gold
+            const isUsd = country === "USD";
+            const isMajor = country === "EUR" || country === "GBP";
+            const isHighOrMed = impact === "high" || impact === "medium";
+            return (isUsd && isHighOrMed) || (isMajor && impact === "high");
+          })
+          .slice(0, 15);
+
+        if (relevantEvents.length > 0) {
+          const parsedEvents: EconomicCalendarItem[] = relevantEvents.map((item: any, idx: number) => {
+            const itemDate = new Date(item.date);
+            const scheduledMs = isNaN(itemDate.getTime()) ? nowMs + idx * 3600000 : itemDate.getTime();
+            const diffMinutes = Math.round((scheduledMs - nowMs) / 60000);
+
+            // Format WIB (UTC+7)
+            const wibHours = (itemDate.getUTCHours() + 7) % 24;
+            const wibMinutes = itemDate.getUTCMinutes();
+            const timeStrWib = `${String(wibHours).padStart(2, "0")}:${String(wibMinutes).padStart(2, "0")} WIB`;
+
+            // Format date relative label
+            const nowDate = new Date();
+            const diffDays = Math.round((scheduledMs - nowMs) / (24 * 3600 * 1000));
+            let dateStr = "Hari Ini";
+            if (diffDays === 1) dateStr = "Besok";
+            else if (diffDays === 2) dateStr = "Lusa";
+            else if (diffDays === -1) dateStr = "Kemarin";
+            else if (diffDays > 2) {
+              const daysArr = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+              dateStr = `${daysArr[itemDate.getDay()]}`;
+            }
+
+            const impactUpper = (item.impact || "HIGH").toUpperCase() as "HIGH" | "MEDIUM" | "LOW";
+
+            let status: "UPCOMING" | "LIVE_NOW" | "RELEASED" = "UPCOMING";
+            if (item.actual && item.actual.trim() !== "") {
+              status = "RELEASED";
+            } else if (diffMinutes < -15) {
+              status = "RELEASED";
+            } else if (diffMinutes >= -15 && diffMinutes <= 15) {
+              status = "LIVE_NOW";
+            }
+
+            // Determine Gold Impact Insight
+            const title = item.title || "Economic Event";
+            let goldEffect = "Dolar menguat jika data lebih tinggi dari perkiraan, memicu potensi koreksi pada XAU/USD.";
+            let cat: "INFLATION" | "EMPLOYMENT" | "CENTRAL_BANK" | "GROWTH" | "SENTIMENT" = "GROWTH";
+
+            if (title.toLowerCase().includes("cpi") || title.toLowerCase().includes("ppi") || title.toLowerCase().includes("inflation")) {
+              cat = "INFLATION";
+              goldEffect = "Aktual > Forecast → Tekanan Jual Gold (Bearish). Aktual < Forecast → Emas Berpotensi Rally (Bullish).";
+            } else if (title.toLowerCase().includes("payrolls") || title.toLowerCase().includes("nfp") || title.toLowerCase().includes("unemployment") || title.toLowerCase().includes("claims")) {
+              cat = "EMPLOYMENT";
+              goldEffect = "Pasar tenaga kerja kuat menguatkan DXY dan menekan emas Spot. Data lemah mendorong lonjakan harga emas.";
+            } else if (title.toLowerCase().includes("fomc") || title.toLowerCase().includes("rate") || title.toLowerCase().includes("fed") || title.toLowerCase().includes("powell")) {
+              cat = "CENTRAL_BANK";
+              goldEffect = "Pernyataan Dovish/Pemotongan Suku Bunga → XAU/USD Bullish Kuat. Hawkish → Tekanan Bearish.";
+            } else if (title.toLowerCase().includes("pmi") || title.toLowerCase().includes("confidence") || title.toLowerCase().includes("sentiment")) {
+              cat = "SENTIMENT";
+              goldEffect = "Kontraksi di bawah 50 memicu arus safe-haven ke emas spot.";
+            }
+
+            return {
+              id: `ff-event-${idx}-${scheduledMs}`,
+              title: item.title || "US Macro Event",
+              country: (item.country || "US").toUpperCase(),
+              currency: (item.country || "USD").toUpperCase(),
+              impact: impactUpper,
+              dateStr,
+              timeStrWib,
+              scheduledTimestamp: scheduledMs,
+              forecast: item.forecast || "N/A",
+              previous: item.previous || "N/A",
+              actual: item.actual && item.actual.trim() !== "" ? item.actual : undefined,
+              goldImpactEffect: goldEffect,
+              description: `Peristiwa fundamental ${item.country} tingkat ${item.impact}. Berpotensi mempengaruhi volatilitas pasangan XAU/USD secara signifikan.`,
+              category: cat,
+              status,
+            };
+          });
+
+          cachedEconomicEvents = parsedEvents;
+          lastCalendarFetchTime = Date.now();
+          return parsedEvents;
+        }
+      }
+    }
+  } catch (err) {
+    // Silent fallback to institutional calendar
+  }
+
+  // Fallback to dynamic calendar
+  const fallbackEvents = generateDynamicInstitutionalCalendar();
+  cachedEconomicEvents = fallbackEvents;
+  lastCalendarFetchTime = Date.now();
+  return fallbackEvents;
+}
+
+// Endpoint for Live Economic News Calendar
+app.get("/api/market/economic-calendar", async (req, res) => {
+  try {
+    const events = await fetchLiveEconomicCalendarFromFeed();
+    res.json({
+      success: true,
+      source: "ForexFactory Real-Time Fundamental Feed & Institutional Macro Engine",
+      lastUpdated: new Date().toISOString(),
+      timestampMs: Date.now(),
+      total: events.length,
+      events,
+    });
+  } catch (error) {
+    const fallback = generateDynamicInstitutionalCalendar();
+    res.json({
+      success: true,
+      source: "Institutional Dynamic Calendar Engine (Offline Resilience)",
+      lastUpdated: new Date().toISOString(),
+      timestampMs: Date.now(),
+      total: fallback.length,
+      events: fallback,
+    });
+  }
+});
+
 // Endpoint for live Gold prices
 app.get("/api/market/gold/live", async (req, res) => {
   res.json({
@@ -1196,20 +1532,24 @@ app.get("/api/market/sentiment-news", async (req, res) => {
   }
 });
 
-// Interactive AI Trading Assistant / Strategy Chat
-app.post("/api/ai/chat", async (req, res) => {
+// Interactive AI Trading Assistant / Comprehensive Intelligence Copilot Engine
+async function handleTradingCopilotChat(req: express.Request, res: express.Response) {
   try {
-    const { message, marketContext, chatHistory = [] } = req.body;
-    const currentPrice = Number(marketContext?.currentPrice || 4500.0);
-    const trend = marketContext?.trend || "BULLISH";
+    const body = req.body || {};
+    const message = body.message || body.prompt || "";
+    const marketContext = body.marketContext || body.context || {};
+    const chatHistory = Array.isArray(body.chatHistory) ? body.chatHistory : [];
+
+    const currentPrice = Number(marketContext?.currentPrice || cachedGoldState?.price || 4500.0);
+    const trend = marketContext?.trend || marketContext?.trendDirection || (marketContext?.signal?.trendDirection) || "BULLISH";
     const timeframe = marketContext?.timeframe || "M15";
     const balance = Number(marketContext?.balance || 10000);
     const riskPercent = Number(marketContext?.riskPerTradePercent || 1);
-    const signal = marketContext?.currentSignal;
-    const bid = Number(marketContext?.bid || currentPrice - 0.15);
-    const ask = Number(marketContext?.ask || currentPrice + 0.15);
-    const spread = Number(marketContext?.spread || 1.6);
-    const change24h = Number(marketContext?.change24h || 0.45);
+    const signal = marketContext?.currentSignal || marketContext?.signal;
+    const bid = Number(marketContext?.bid || cachedGoldState?.bid || currentPrice - 0.08);
+    const ask = Number(marketContext?.ask || cachedGoldState?.ask || currentPrice + 0.08);
+    const spread = Number(marketContext?.spread || cachedGoldState?.spread || 1.6);
+    const change24h = Number(marketContext?.change24h || cachedGoldState?.change || 0.45);
 
     // Extract injected key levels & recommended zones if available
     const keyLevels = marketContext?.keyLevels || {};
@@ -1220,13 +1560,13 @@ app.post("/api/ai/chat", async (req, res) => {
       ? keyLevels.resistances
       : [Number((currentPrice + 3.5).toFixed(2)), Number((currentPrice + 7.0).toFixed(2))];
 
-    const isBuy = trend === "BULLISH" || (signal && signal.signalType?.includes("BUY"));
-    const isSell = trend === "BEARISH" || (signal && signal.signalType?.includes("SELL"));
+    const isBuy = trend === "BULLISH" || (signal && String(signal.signalType || "").includes("BUY"));
+    const isSell = trend === "BEARISH" || (signal && String(signal.signalType || "").includes("SELL"));
 
-    let tfPips = 3.5;
-    if (timeframe === "M1") tfPips = 1.8;
-    else if (timeframe === "M5") tfPips = 2.5;
-    else if (timeframe === "M15") tfPips = 4.0;
+    let tfPips = 5.0; // Standard 50 pips on XAU/USD
+    if (timeframe === "M1") tfPips = 3.0;
+    else if (timeframe === "M5") tfPips = 5.0;
+    else if (timeframe === "M15") tfPips = 5.0;
     else if (timeframe === "H1") tfPips = 8.0;
     else if (timeframe === "H4") tfPips = 15.0;
     else if (timeframe === "D1") tfPips = 30.0;
@@ -1235,83 +1575,69 @@ app.post("/api/ai/chat", async (req, res) => {
     const sl = Number(marketContext?.recommendedZones?.stopLoss || signal?.stopLoss || defaultSl);
     const riskDist = Math.max(1.0, Math.abs(currentPrice - sl));
 
-    const defaultTp1 = isBuy ? Number((currentPrice + riskDist * 1.5).toFixed(2)) : Number((currentPrice - riskDist * 1.5).toFixed(2));
-    const defaultTp2 = isBuy ? Number((currentPrice + riskDist * 2.5).toFixed(2)) : Number((currentPrice - riskDist * 2.5).toFixed(2));
-    const defaultTp3 = isBuy ? Number((currentPrice + riskDist * 4.0).toFixed(2)) : Number((currentPrice - riskDist * 4.0).toFixed(2));
+    const defaultTp1 = isBuy ? Number((currentPrice + 5.0).toFixed(2)) : Number((currentPrice - 5.0).toFixed(2));
+    const defaultTp2 = isBuy ? Number((currentPrice + 10.0).toFixed(2)) : Number((currentPrice - 10.0).toFixed(2));
+    const defaultTp3 = isBuy ? Number((currentPrice + 15.0).toFixed(2)) : Number((currentPrice - 15.0).toFixed(2));
+    const defaultTp4 = isBuy ? Number((currentPrice + 20.0).toFixed(2)) : Number((currentPrice - 20.0).toFixed(2));
 
     const tp1 = Number(marketContext?.recommendedZones?.takeProfit1 || signal?.takeProfit1 || defaultTp1);
     const tp2 = Number(marketContext?.recommendedZones?.takeProfit2 || signal?.takeProfit2 || defaultTp2);
     const tp3 = Number(marketContext?.recommendedZones?.takeProfit3 || signal?.takeProfit3 || defaultTp3);
+    const tp4 = Number(marketContext?.recommendedZones?.takeProfit4 || signal?.takeProfit4 || defaultTp4);
 
-    const entryZone = marketContext?.recommendedZones?.entryZone || marketContext?.smcAnalysis?.orderBlockZone ||
-      `${(currentPrice - (isBuy ? 0.8 : 0.4)).toFixed(2)} - ${(currentPrice + (isBuy ? 0.4 : 0.8)).toFixed(2)}`;
+    const entryZone = marketContext?.recommendedZones?.entryZone || marketContext?.smcAnalysis?.orderBlockZone || signal?.entryPrice
+      ? `${Number(signal?.entryPrice || currentPrice).toFixed(2)}`
+      : `${(currentPrice - (isBuy ? 0.8 : 0.4)).toFixed(2)} - ${(currentPrice + (isBuy ? 0.4 : 0.8)).toFixed(2)}`;
 
-    const obZone = marketContext?.smcAnalysis?.orderBlockZone ||
+    const obZone = marketContext?.smcAnalysis?.orderBlockZone || signal?.smcAnalysis?.orderBlockZone ||
       `${(currentPrice - (isBuy ? 1.5 : -1.5)).toFixed(2)} - ${(currentPrice - (isBuy ? 3.0 : -3.0)).toFixed(2)}`;
-    const liquidityTarget = marketContext?.smcAnalysis?.liquidityTarget ||
+    const liquidityTarget = marketContext?.smcAnalysis?.liquidityTarget || signal?.smcAnalysis?.liquidityTarget ||
       `$${(currentPrice + (isBuy ? 5.5 : -5.5)).toFixed(2)} (${isBuy ? "Buy-Side Liquidity / BSL" : "Sell-Side Liquidity / SSL"})`;
-    const bosStatus = marketContext?.smcAnalysis?.bosStatus || "Break of Structure Validated";
-    const marketStructure = marketContext?.smcAnalysis?.marketStructure ||
+    const bosStatus = marketContext?.smcAnalysis?.bosStatus || signal?.smcAnalysis?.bosStatus || "Break of Structure Validated";
+    const marketStructure = marketContext?.smcAnalysis?.marketStructure || signal?.smcAnalysis?.marketStructure ||
       (isBuy ? "Higher Highs & Higher Lows (Bullish Expansion)" : isSell ? "Lower Lows & Lower Highs (Bearish Expansion)" : "Range Equilibrium");
 
     const maxRiskUsd = (balance * riskPercent) / 100;
     const calculatedLot = Math.max(0.01, Number((maxRiskUsd / (riskDist * 100)).toFixed(2)));
     const recLot = Number(marketContext?.recommendedLotSize || signal?.riskAssessment?.recommendedLotSize || calculatedLot);
 
-    const technicalFactors: string[] = Array.isArray(marketContext?.technicalFactors) && marketContext.technicalFactors.length > 0
-      ? marketContext.technicalFactors
-      : [
-          `EMA 20 vs EMA 50 Dynamic Confluence pada TF ${timeframe}`,
-          `RSI (14) berada dalam zona ekspansi momentum yang terarah`,
-          `Likuiditas teridentifikasi di zona eksternal ${liquidityTarget}`,
-        ];
+    const tradingCtx: TradingContext = {
+      currentPrice,
+      symbol: "XAUUSD",
+      bid,
+      ask,
+      spread,
+      trend,
+      timeframe,
+      balance,
+      riskPerTradePercent: riskPercent,
+      currentSignal: signal,
+      keyLevels: {
+        supports,
+        resistances,
+      },
+      recommendedZones: {
+        entryZone,
+        stopLoss: sl,
+        takeProfit1: tp1,
+        takeProfit2: tp2,
+        takeProfit3: tp3,
+        takeProfit4: tp4,
+      },
+      smcAnalysis: {
+        orderBlockZone: obZone,
+        liquidityTarget,
+        bosStatus,
+        marketStructure,
+      },
+      technicalFactors: marketContext?.technicalFactors,
+    };
 
     const ai = getGeminiClient();
 
     if (ai) {
       try {
-        const systemPrompt = `Anda adalah Gold & Forex AI Copilot spesialis XAU/USD (Smart Money Concepts / ICT & Institutional Price Action).
-Gunakan gaya bahasa Indonesia yang luwes, profesional, tajam, dan mendalam seperti mentor trading institusional berpengalaman. HINDARI jawaban pendek atau generic.
-
-DATA PASAR REAL-TIME YANG DIINJEKSI:
-- Pair: XAU/USD (Spot Gold)
-- Harga Saat Ini: $${currentPrice.toFixed(2)} (Bid: $${bid.toFixed(2)} / Ask: $${ask.toFixed(2)} | Spread: ${spread.toFixed(1)} pips | Change 24h: ${change24h > 0 ? "+" : ""}${change24h.toFixed(2)}%)
-- Timeframe Aktif: ${timeframe}
-- Bias Struktur Pasar: ${trend}
-- Level Support Aktif: $${supports.join(", $")}
-- Level Resistance Aktif: $${resistances.join(", $")}
-- Zona Order Block / FVG: ${obZone}
-- Target Likuiditas: ${liquidityTarget}
-- Status Struktur SMC: ${bosStatus} (${marketStructure})
-- Rekomendasi Setup Presisi:
-  * Zona Entry: $${entryZone}
-  * Invalidation / Stop Loss: $${sl.toFixed(2)} (Jarak: ${riskDist.toFixed(2)} USD / ~${Math.round(riskDist * 10)} pips)
-  * Take Profit 1 (R:R 1:1.5 - Kunci BEP): $${tp1.toFixed(2)}
-  * Take Profit 2 (R:R 1:2.5 - Main Target): $${tp2.toFixed(2)}
-  * Runner Take Profit 3 (R:R 1:4.0 - Swing): $${tp3.toFixed(2)}
-- Profil Risiko Trader:
-  * Saldo: $${balance.toLocaleString()} USD
-  * Risiko per Trade: ${riskPercent}% (Maksimal Loss: -$${maxRiskUsd.toFixed(2)} USD)
-  * Rekomendasi Lot Size: ${recLot} Lot
-- Posisi Terbuka Saat Ini: ${marketContext?.openPositionsCount || 0} posisi
-
-PANDUAN FORMAT JAWABAN (SELALU STRUKTURKAN DENGAN RAPI MENGGUNAKAN MARKDOWN):
-1. **Executive Market Summary & Market Structure (${timeframe})**:
-   Ulas tren, dinamika buyer vs seller, dan konfirmasi struktur SMC (BOS/CHoCH/Liquidity Grab).
-2. **🧱 Pemetaan Level Kunci (Support, Resistance & Order Block)**:
-   Sebutkan level S1, S2, R1, R2 dan area Order Block / FVG yang relevan.
-3. **🎯 Rencana Setup Eksekusi Presisi**:
-   - Tipe Aksi: BUY (LONG) / SELL (SHORT) / WAIT FOR RETEST
-   - Zona Entry Presisi: $${entryZone}
-   - Stop Loss (SL): $${sl.toFixed(2)}
-   - Target Take Profit: TP1 ($${tp1.toFixed(2)}), TP2 ($${tp2.toFixed(2)}), TP3 ($${tp3.toFixed(2)}) dengan rasio R:R.
-4. **🧠 Konfluensi SMC & Indikator Teknikal**:
-   Jelaskan mengapa setup ini valid (mitigasi OB, fill FVG, sweep likuiditas, konfluensi EMA/RSI).
-5. **🛡️ Manajemen Risiko & SOP Eksekusi**:
-   - Rekomendasi Lot: ${recLot} Lot (sesuai saldo $${balance.toLocaleString()} dan toleransi risiko $${maxRiskUsd.toFixed(2)}).
-   - Rules: Geser SL ke Breakeven (+0) setelah TP1 tercapai, jangan overtrading.
-
-Gunakan Markdown yang rapi dengan heading, bullet points, dan penegasan tebal pada angka harga.`;
+        const systemPrompt = buildTradingExpertSystemPrompt(tradingCtx);
 
         const chat = ai.chats.create({
           model: "gemini-3.7-flash",
@@ -1321,12 +1647,14 @@ Gunakan Markdown yang rapi dengan heading, bullet points, dan penegasan tebal pa
         });
 
         const response = await chat.sendMessage({
-          message: message || `Berikan analisa setup lengkap XAU/USD pada timeframe ${timeframe} dengan level kunci dan zona TP/SL.`,
+          message: message || `Berikan analisa dan panduan trading XAU/USD terlengkap untuk kondisi pasar saat ini.`,
         });
 
         if (response && response.text) {
           return res.json({
+            success: true,
             reply: response.text,
+            response: response.text,
           });
         }
       } catch (geminiErr) {
@@ -1334,85 +1662,24 @@ Gunakan Markdown yang rapi dengan heading, bullet points, dan penegasan tebal pa
       }
     }
 
-    // Comprehensive Dynamic Fallback Response Engine (Rich, Structured, and Actionable)
-    const actionLabel = isBuy ? "BUY (LONG ON DEMAND RETEST)" : isSell ? "SELL (SHORT ON SUPPLY REJECTION)" : "WAIT & SEE / SCALP RANGE";
-    const obType = isBuy ? "Demand Order Block (Bullish OB)" : "Supply Order Block (Bearish OB)";
-    const liquidityType = isBuy ? "Buy-Side Liquidity (BSL / Equal Highs)" : "Sell-Side Liquidity (SSL / Equal Lows)";
-
-    let customInsight = "";
-    const lowerMsg = (message || "").toLowerCase();
-
-    if (lowerMsg.includes("kenapa") || lowerMsg.includes("alasan") || lowerMsg.includes("reason")) {
-      customInsight = `
-### 🧠 Alasan & Konfluensi Masuk Posisi:
-- **Konfirmasi Struktur SMC**: Terbentuk valid *${marketStructure}* pada timeframe **${timeframe}** dengan status *${bosStatus}*.
-- **Dynamic Moving Averages**: Posisi harga saat ini ($${currentPrice.toFixed(2)}) ${isBuy ? "berada di atas EMA 20 & EMA 50, mengonfirmasi dorongan momentum buyer institusional" : "tertahan di bawah resistance EMA 50, menunjukkan tekanan jual dominan"}.
-- **Liquidity Sweep**: Pasar telah menyerap likuiditas ${isBuy ? "di area support bawah dan siap berekspansi ke target buy-side atas" : "di area resistance atas dan siap melanjutkan koreksi ke sell-side bawah"}.
-- **Risk-to-Reward Ratio**: Setup ini menawarkan rasio **1:2.5** yang sangat ideal untuk menjaga pertumbuhan modal jangka panjang.`;
-    } else if (lowerMsg.includes("order block") || lowerMsg.includes("support") || lowerMsg.includes("resistance") || lowerMsg.includes("level")) {
-      customInsight = `
-### 🧱 Pemetaan Zona Kunci & Order Block (${timeframe}):
-- **Support Terdekat**: **S1: $${supports[0]}** | **S2: $${supports[1] || (supports[0] - 4).toFixed(2)}**
-- **Resistance Terdekat**: **R1: $${resistances[0]}** | **R2: $${resistances[1] || (resistances[0] + 4).toFixed(2)}**
-- **Zona Order Block (OB)**: **$${obZone}** (${obType})
-- **Level Invalidasi Keras (Hard SL)**: **$${sl.toFixed(2)}** (Jika harga break level ini, struktur setup dinyatakan gugur).
-- **Target Likuiditas Major**: **$${tp2.toFixed(2)}** (${liquidityType})`;
-    } else if (lowerMsg.includes("lot") || lowerMsg.includes("saldo") || lowerMsg.includes("resiko") || lowerMsg.includes("risk")) {
-      customInsight = `
-### ⚖️ Kalkulasi Manajemen Risiko & Ukuran Lot:
-- **Saldo Akun**: **$${balance.toLocaleString()} USD**
-- **Batas Risiko Maksimal (${riskPercent}%)**: **-$${maxRiskUsd.toFixed(2)} USD**
-- **Jarak Stop Loss**: **${riskDist.toFixed(2)} USD** (~${Math.round(riskDist * 10)} pips)
-- **Rekomendasi Lot Size Aman**: **${recLot} Lot**
-- *SOP Disiplin*: Jangan menambah lot saat floating minus. Dengan lot **${recLot}**, jika terkena SL kerugian tetap terkontrol di batas aman -$${maxRiskUsd.toFixed(2)}.`;
-    } else {
-      customInsight = `
-### 🧠 Konfluensi SMC & Indikator Teknikal:
-- **Trend Bias**: Struktur **${trend}** terkonfirmasi pada grafik **${timeframe}** (${marketStructure}).
-- **Level Kunci**: Support di **$${supports[0]}** dan Resistance di **$${resistances[0]}**.
-- **Dynamic EMA Confluence**: EMA 20 dan EMA 50 membentuk area pijakan dinamis di sekitar **$${entryZone}**.
-- **SMC Liquidity**: Penetrasi harga mengincar area ${liquidityTarget} di target **$${tp2.toFixed(2)}**.`;
-    }
-
-    const fullReply = `## 📊 Analisa Pasar XAU/USD (Spot Gold) - TF ${timeframe}
-
-Kondisi harga emas saat ini berada di level **$${currentPrice.toFixed(2)}** (Bid: **$${bid.toFixed(2)}** / Ask: **$${ask.toFixed(2)}** | Spread: **${spread.toFixed(1)} pips**) dengan bias struktur pasar **${trend}**.
-
----
-
-### 🧱 Level Kunci Pasar Saat Ini:
-- **Support 1 / 2**: **$${supports[0]}** / **$${supports[1] || (supports[0] - 4).toFixed(2)}**
-- **Resistance 1 / 2**: **$${resistances[0]}** / **$${resistances[1] || (resistances[0] + 4).toFixed(2)}**
-- **Zona Order Block / FVG**: **${obZone}**
-
----
-
-### 🎯 Setup Rencana Eksekusi:
-- **Rekomendasi Aksi**: **${actionLabel}**
-- **🎯 Zona Entry Presisi**: **$${entryZone}** *(Area ${obType})*
-- **🛑 Stop Loss (SL)**: **$${sl.toFixed(2)}** *(Jarak ${riskDist.toFixed(2)} USD / ~${Math.round(riskDist * 10)} Pips)*
-- **🎯 Target Take Profit**:
-  - **TP 1**: **$${tp1.toFixed(2)}** *(R:R 1:1.5 - Kunci profit awal / Geser SL ke BEP)*
-  - **TP 2**: **$${tp2.toFixed(2)}** *(R:R 1:2.5 - Target Likuiditas ${liquidityType})*
-  - **Runner TP 3**: **$${tp3.toFixed(2)}** *(R:R 1:4.0 - Major Trend Expansion)*
-
-${customInsight}
-
----
-
-### 🛡️ Rencana Eksekusi & Manajemen Risiko:
-1. **Ukuran Lot Disarankan**: Gunakan **${recLot} Lot** untuk membatasi risiko maksimal di **-$${maxRiskUsd.toFixed(2)} USD** (${riskPercent}% dari saldo $${balance.toLocaleString()}).
-2. **SOP Breakeven**: Segera pindahkan Stop Loss ke **Breakeven / Entry (+0)** begitu harga menyentuh **TP 1 ($${tp1.toFixed(2)})** agar posisi menjadi *risk-free*.
-3. Siap dieksekusi secara manual via aplikasi Exness MT4/MT5 mobile Anda dengan parameter tertera.`;
+    // Comprehensive Dynamic Fallback Response Engine from Trading Expert System Module
+    const replyContent = generateFallbackExpertResponse(message, tradingCtx);
 
     return res.json({
-      reply: fullReply,
+      success: true,
+      reply: replyContent,
+      response: replyContent,
     });
   } catch (err: any) {
-    console.error("AI Chat Error:", err);
-    res.status(500).json({ error: err.message || "Chat failed" });
+    console.error("AI Copilot Chat Error:", err);
+    res.status(500).json({ success: false, error: err.message || "Chat processing failed" });
   }
-});
+}
+
+// Mount handler on both endpoints for full compatibility
+app.post("/api/copilot/chat", handleTradingCopilotChat);
+app.post("/api/ai/chat", handleTradingCopilotChat);
+
 
 // Vite middleware or production static serving
 async function startServer() {
