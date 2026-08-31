@@ -211,7 +211,7 @@ export const MarketSentimentTicker: React.FC<MarketSentimentTickerProps> = ({
 
       {/* Modal 1: Fear & Greed In-Depth Breakdown Modal */}
       {isSentimentDetailOpen && fg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 animate-in fade-in duration-200">
           <div
             id="fear-greed-detail-modal"
             className="bg-[#0f1420] border border-slate-800 w-full max-w-lg rounded-2xl p-5 shadow-2xl space-y-4 text-slate-200"
@@ -315,7 +315,7 @@ export const MarketSentimentTicker: React.FC<MarketSentimentTickerProps> = ({
 
       {/* Modal 2: All Market News & Selected Headline Detailed Modal */}
       {isModalOpen && selectedHeadline && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 animate-in fade-in duration-200">
           <div
             id="market-news-modal"
             className="bg-[#0f1420] border border-slate-800 w-full max-w-2xl rounded-2xl p-5 shadow-2xl space-y-4 text-slate-200 max-h-[85vh] flex flex-col"

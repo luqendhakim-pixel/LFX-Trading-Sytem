@@ -56,7 +56,7 @@ export const LotSimulationModal: React.FC<LotSimulationModalProps> = ({
   const marginRequired = Number(((recommendedLot * 100 * entry) / leverage).toFixed(2));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fadeIn">
       <div
         id="lot-simulation-modal"
         className="w-full max-w-lg bg-[#0a0f1d] border border-slate-700/70 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 relative overflow-hidden max-h-[90vh] overflow-y-auto"

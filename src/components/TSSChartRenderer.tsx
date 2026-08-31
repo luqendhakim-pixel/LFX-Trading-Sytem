@@ -764,7 +764,7 @@ export const TSSChartRenderer: React.FC<TSSChartRendererProps> = ({
       {showToolbar && (
         <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between pointer-events-none gap-2 flex-wrap">
           {/* Left: Interactive Real-time OHLC Legend */}
-          <div className="flex items-center gap-2 pointer-events-auto bg-[#131722]/90 backdrop-blur-md px-2.5 py-1 rounded-xl border border-slate-800 shadow-md font-mono text-[11px]">
+          <div className="flex items-center gap-2 pointer-events-auto bg-[#131722] px-2.5 py-1 rounded-xl border border-slate-800 shadow-md font-mono text-[11px]">
             {/* TSS Indicator Status */}
             <div className="flex items-center gap-1.5 border-r border-slate-800 pr-2">
               <span
@@ -802,7 +802,7 @@ export const TSSChartRenderer: React.FC<TSSChartRendererProps> = ({
           </div>
 
           {/* Right: Modern Chart Quick Action Toolbar */}
-          <div className="flex items-center gap-1 pointer-events-auto bg-[#131722]/90 backdrop-blur-md p-1 rounded-xl border border-slate-800 shadow-md">
+          <div className="flex items-center gap-1 pointer-events-auto bg-[#131722] p-1 rounded-xl border border-slate-800 shadow-md">
             {/* Toggle Area TP / SL */}
             <button
               onClick={() => setShowTargetZones(!showTargetZones)}
@@ -864,7 +864,7 @@ export const TSSChartRenderer: React.FC<TSSChartRendererProps> = ({
 
       {/* 3. Minimalist Mobile TSS Settings Modal */}
       {showConfigModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 animate-fadeIn">
           <div className="bg-[#0b1220] border border-slate-700/90 rounded-2xl p-4 w-full max-w-sm shadow-2xl space-y-3 font-mono text-xs">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <div className="flex items-center gap-1.5 text-amber-400 font-bold">

@@ -51,7 +51,7 @@ export const TerminalHeader: React.FC<TerminalHeaderProps> = ({
       id="terminal-header-topbar"
       className="sticky top-1 sm:top-1.5 z-40 px-2 sm:px-3.5 py-1.5 mx-auto w-full max-w-[1780px]"
     >
-      <div className="bg-[#0b0f19]/85 backdrop-blur-xl border border-slate-700/50 shadow-2xl shadow-black/50 rounded-2xl px-2.5 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between gap-2 text-slate-200 select-none transition-all">
+      <div className="bg-[#0b0f19] border border-slate-700/60 shadow-2xl shadow-black/70 rounded-2xl px-2.5 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between gap-2 text-slate-200 select-none transition-all">
         {/* Left Section: Brand / Asset & Live Price Stream */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {/* Compact Asset Logo & Title */}

@@ -640,7 +640,7 @@ export const DynamicTSSChart: React.FC<DynamicTSSChartProps> = ({
       {/* Top Sleek Mobile-First TSS Floating Toolbar */}
       <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between pointer-events-none gap-1.5">
         {/* Left: Pine Script Status Pill */}
-        <div className="flex items-center gap-1.5 pointer-events-auto bg-[#0b1220]/90 backdrop-blur-md px-2.5 py-1 rounded-xl border border-slate-700/80 shadow-md">
+        <div className="flex items-center gap-1.5 pointer-events-auto bg-[#0b1220] px-2.5 py-1 rounded-xl border border-slate-700/80 shadow-md">
           <div className="flex items-center gap-1">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -681,7 +681,7 @@ export const DynamicTSSChart: React.FC<DynamicTSSChartProps> = ({
         </div>
 
         {/* Right: Quick Action Icon Buttons */}
-        <div className="flex items-center gap-1 pointer-events-auto bg-[#0b1220]/90 backdrop-blur-md p-1 rounded-xl border border-slate-700/80 shadow-md">
+        <div className="flex items-center gap-1 pointer-events-auto bg-[#0b1220] p-1 rounded-xl border border-slate-700/80 shadow-md">
           {/* Zoom In */}
           <button
             onClick={() => setVisibleCount((p) => Math.max(12, p - 6))}
@@ -738,7 +738,7 @@ export const DynamicTSSChart: React.FC<DynamicTSSChartProps> = ({
 
       {/* Floating Bottom Signal Reversal Indicator if New Flip */}
       {(latestBar.bullSignal || latestBar.bearSignal) && (
-        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#09101d]/95 border border-amber-500/50 shadow-xl backdrop-blur-md animate-bounce max-w-[90%]">
+        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#09101d] border border-amber-500/50 shadow-xl animate-bounce max-w-[90%]">
           <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin shrink-0" />
           <span className="text-[11px] font-black font-mono text-white truncate">
             {latestBar.bullSignal ? "FRESH TSS BUY FLIP" : "FRESH TSS SELL FLIP"}
@@ -755,7 +755,7 @@ export const DynamicTSSChart: React.FC<DynamicTSSChartProps> = ({
 
       {/* TSS Parameters Modal */}
       {showSettingsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 animate-fadeIn">
           <div className="bg-[#0b1220] border border-slate-700/90 rounded-2xl p-4 sm:p-5 w-full max-w-md shadow-2xl space-y-3.5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
               <div className="flex items-center gap-2">
@@ -923,7 +923,7 @@ export const DynamicTSSChart: React.FC<DynamicTSSChartProps> = ({
 
       {/* Pine Script Code Modal */}
       {showPineModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 animate-fadeIn">
           <div className="bg-[#0c1424] border border-slate-700/90 rounded-2xl p-4 sm:p-5 w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl space-y-2.5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
               <div className="flex items-center gap-2">

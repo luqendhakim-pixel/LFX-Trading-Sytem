@@ -7,6 +7,7 @@ import {
   ShieldAlert,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Sparkles,
   RefreshCw,
   Zap,
@@ -67,11 +68,11 @@ export const EconomicNewsCalendar: React.FC<EconomicNewsCalendarProps> = ({
     loadCalendarData(false);
   }, [loadCalendarData]);
 
-  // Real-time polling: Refresh calendar every 45s, update clock every 5s for smooth countdown
+  // Real-time polling: Refresh calendar every 45s, update clock every 1s for live countdown
   useEffect(() => {
     const clockTimer = setInterval(() => {
       setNowMs(Date.now());
-    }, 5000);
+    }, 1000);
 
     const syncTimer = setInterval(() => {
       loadCalendarData(false);
@@ -97,49 +98,52 @@ export const EconomicNewsCalendar: React.FC<EconomicNewsCalendarProps> = ({
 
   const formatCountdown = (targetMs: number) => {
     const diffSec = Math.floor((targetMs - nowMs) / 1000);
-    if (diffSec < 0 && diffSec > -1800) {
-      return `🔴 Sedang Rilis (${Math.abs(Math.floor(diffSec / 60))}m lalu)`;
+    if (diffSec < 0 && diffSec > -1200) {
+      return `🔴 Rilis (${Math.abs(Math.floor(diffSec / 60))}m lalu)`;
     }
-    if (diffSec <= -1800) {
+    if (diffSec <= -1200) {
       return "✓ Selesai";
     }
     const h = Math.floor(diffSec / 3600);
     const m = Math.floor((diffSec % 3600) / 60);
-    if (h > 24) {
+    if (h >= 24) {
       const days = Math.floor(h / 24);
       return `${days} hari lagi`;
     }
     if (h > 0) {
       return `${h}j ${m}m lagi`;
     }
-    return `${m} menit lagi`;
+    return `${m}m lagi`;
   };
 
   const getStatusVisuals = (status: VolatilityStatus) => {
     switch (status) {
       case "NO_TRADE_WINDOW":
         return {
-          bg: "bg-rose-950/70 border-rose-500/70 text-rose-200",
+          bg: "bg-rose-950/60 border-rose-500/50 text-rose-200",
           icon: ShieldAlert,
-          iconColor: "text-rose-400 animate-bounce",
+          iconColor: "text-rose-400 animate-pulse",
           badge: "bg-rose-500/20 text-rose-300 border-rose-500/40",
+          tag: "ZONA MERAH (NO-TRADE)",
           title: "ZONA MERAH: NO-TRADE WINDOW (HIGH VOLATILITY)",
         };
       case "CAUTION":
         return {
-          bg: "bg-amber-950/70 border-amber-500/70 text-amber-200",
+          bg: "bg-amber-950/60 border-amber-500/50 text-amber-200",
           icon: AlertTriangle,
           iconColor: "text-amber-400 animate-pulse",
           badge: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+          tag: "WASPADA NEWS",
           title: "WASPADA: MENDEKATI BERITA HIGH-IMPACT",
         };
       case "SAFE":
       default:
         return {
-          bg: "bg-emerald-950/40 border-emerald-500/40 text-emerald-300",
+          bg: "bg-emerald-950/35 border-emerald-500/40 text-emerald-300",
           icon: ShieldCheck,
           iconColor: "text-emerald-400",
           badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+          tag: "SAFE TO TRADE",
           title: "SAFE TO TRADE: KONDISI MAKRO AMAN",
         };
     }
@@ -152,36 +156,52 @@ export const EconomicNewsCalendar: React.FC<EconomicNewsCalendarProps> = ({
     return (
       <div
         id="compact-economic-news-bar"
-        className={`rounded-2xl border p-3.5 shadow-lg backdrop-blur-md transition-all ${statusVisual.bg}`}
+        className={`rounded-2xl border p-3 sm:p-3.5 shadow-lg transition-all group hover:border-cyan-500/50 ${statusVisual.bg}`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <StatusIcon className={`w-5 h-5 shrink-0 ${statusVisual.iconColor}`} />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase tracking-wider">
-                  {statusVisual.title}
+        <div className="flex items-center justify-between gap-2.5 sm:gap-4">
+          {/* Left: Status Icon, Title Tag, Countdown & Context */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="w-8 h-8 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center shrink-0 shadow-sm">
+              <StatusIcon className={`w-4 h-4 ${statusVisual.iconColor}`} />
+            </div>
+
+            <div className="min-w-0 flex-1 space-y-0.5">
+              {/* Header Badges Row */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <span className="text-[11px] sm:text-xs font-black uppercase tracking-wide text-white whitespace-nowrap">
+                  {statusVisual.tag}
                 </span>
+
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border whitespace-nowrap hidden xs:inline-flex items-center gap-1 bg-slate-900/90 border-slate-700/80 text-slate-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span>Makro Aman</span>
+                </span>
+
                 {newsSafety.nearestEvent && (
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-700">
-                    ⏱️ {formatCountdown(newsSafety.nearestEvent.scheduledTimestamp)}
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-950/90 border border-slate-700 text-amber-300 whitespace-nowrap shrink-0 flex items-center gap-1 shadow-inner">
+                    <span>⏱️</span>
+                    <span>{formatCountdown(newsSafety.nearestEvent.scheduledTimestamp)}</span>
                   </span>
                 )}
               </div>
-              <p className="text-[11px] opacity-90 line-clamp-1 mt-0.5 font-medium">
+
+              {/* Subtitle Message */}
+              <p className="text-[11px] text-slate-300/90 truncate font-medium">
                 {newsSafety.message}
               </p>
             </div>
           </div>
 
+          {/* Right: Live Feed & XAU/USD & Click Chevron */}
           <div className="shrink-0 flex items-center gap-1.5">
-            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
+            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono font-bold whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               Live Feed
             </span>
-            <span className="text-[10px] px-2 py-1 rounded-lg bg-black/40 border border-white/10 font-mono font-bold">
+            <span className="text-[10px] px-2 py-1 rounded-lg bg-black/50 border border-white/10 font-mono font-bold text-slate-200 whitespace-nowrap">
               XAU/USD
             </span>
+            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-cyan-300 group-hover:translate-x-0.5 transition shrink-0 hidden xs:block" />
           </div>
         </div>
       </div>
@@ -194,80 +214,110 @@ export const EconomicNewsCalendar: React.FC<EconomicNewsCalendarProps> = ({
       className="bg-[#0b101d] border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-2xl text-slate-100 space-y-4 animate-fadeIn"
     >
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
-        <div className="flex items-center space-x-2.5">
-          <div className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-md">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+        <div className="flex items-center space-x-2.5 min-w-0 pr-8 sm:pr-0">
+          <div className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-md shrink-0">
             <Calendar className="w-5 h-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-extrabold text-white text-base tracking-tight">
-                Kalender Berita Ekonomi (Red Folder News)
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-extrabold text-white text-sm sm:text-base tracking-tight truncate">
+                Kalender Berita Ekonomi
               </h3>
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-[10px] font-mono text-emerald-300 font-bold">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-[9.5px] font-mono text-emerald-300 font-bold whitespace-nowrap">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>REAL-TIME LIVE</span>
+                <span>LIVE FEED</span>
               </div>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
-              <span>Sumber: {feedSource}</span>
-              <span>•</span>
-              <span className="text-slate-400">Sinkron: {lastSyncTime}</span>
             </div>
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
+        {/* Action Controls: Refresh & Filter Buttons (Presisi Sejajar & No-Wrap) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
           {/* Refresh Button */}
           <button
             onClick={() => loadCalendarData(true)}
             disabled={isRefreshing}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+            className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 shrink-0"
             title="Perbarui Data Berita Terkini"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">Refresh</span>
+            <span className="hidden md:inline">Refresh</span>
           </button>
 
-          {/* Filter Pills */}
-          <div className="flex items-center bg-[#060a14] p-1 rounded-xl border border-slate-800 gap-1 text-xs">
+          {/* Filter Pills Grid: 3 Tombol Sejajar Presisi */}
+          <div className="grid grid-cols-3 bg-[#060a14] p-1 rounded-xl border border-slate-800 gap-1 text-[11px] sm:text-xs flex-1 sm:flex-initial sm:flex sm:items-center">
             {(["ALL", "HIGH", "MEDIUM"] as const).map((filter) => (
               <button
                 key={filter}
                 onClick={() => setImpactFilter(filter)}
-                className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                className={`px-2 sm:px-3 py-1.5 sm:py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap text-center flex items-center justify-center gap-1 ${
                   impactFilter === filter
-                    ? "bg-amber-400 text-slate-950 shadow"
+                    ? "bg-amber-400 text-slate-950 shadow-md font-extrabold"
                     : "text-slate-400 hover:text-white"
                 }`}
               >
-                {filter === "ALL" ? "Semua" : filter === "HIGH" ? "🔴 High Impact" : "🟡 Medium+"}
+                {filter === "ALL" ? (
+                  <span>Semua</span>
+                ) : filter === "HIGH" ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-rose-500 inline-block shrink-0"></span>
+                    <span>High Impact</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shrink-0"></span>
+                    <span>Medium+</span>
+                  </>
+                )}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* 1. Real-Time Volatility Safety Banner */}
-      <div className={`p-4 rounded-2xl border transition shadow-lg ${statusVisual.bg}`}>
-        <div className="flex items-start gap-3">
-          <StatusIcon className={`w-6 h-6 shrink-0 mt-0.5 ${statusVisual.iconColor}`} />
-          <div className="space-y-1 flex-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="font-black text-sm tracking-wide">{statusVisual.title}</h4>
-              {newsSafety.nearestEvent && (
-                <span className="px-2.5 py-0.5 rounded-full bg-black/50 border border-white/20 text-xs font-mono font-black">
-                  ⏱️ {formatCountdown(newsSafety.nearestEvent.scheduledTimestamp)}
-                </span>
-              )}
+      {/* 1. Real-Time Volatility Safety Banner (Presisi & Rapi) */}
+      <div className={`p-3.5 sm:p-4 rounded-2xl border transition shadow-xl space-y-2.5 ${statusVisual.bg}`}>
+        {/* Top Header Row: Icon, Title, Pill Status, Countdown Sejajar Presisi */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-8 h-8 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center shrink-0 shadow-sm">
+              <StatusIcon className={`w-4 h-4 ${statusVisual.iconColor}`} />
             </div>
-            <p className="text-xs leading-relaxed opacity-95 font-medium">{newsSafety.message}</p>
-            <div className="text-[11.5px] font-semibold pt-1 border-t border-white/10 flex items-center gap-1.5">
-              <span className="text-amber-300">💡 SOP Eksekusi:</span>
-              <span>{newsSafety.recommendation}</span>
+            <div className="min-w-0 flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <h4 className="font-black text-xs sm:text-sm tracking-wide text-white uppercase">
+                {statusVisual.title}
+              </h4>
+              <span className="text-[9.5px] sm:text-[10px] px-2 py-0.5 rounded-md font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 whitespace-nowrap inline-flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span>Kondusif</span>
+              </span>
             </div>
           </div>
+
+          {newsSafety.nearestEvent && (
+            <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0">
+              <span className="px-2.5 py-1 rounded-xl bg-black/70 border border-white/15 text-[10.5px] sm:text-[11px] font-mono font-bold text-amber-300 whitespace-nowrap flex items-center gap-1 shadow-inner">
+                <span>⏱️</span>
+                <span>{formatCountdown(newsSafety.nearestEvent.scheduledTimestamp)}</span>
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Message */}
+        <p className="text-xs leading-relaxed opacity-90 font-medium text-slate-200 pl-0.5">
+          {newsSafety.message}
+        </p>
+
+        {/* SOP Execution Box */}
+        <div className="text-[11.5px] p-2.5 rounded-xl bg-black/35 border border-white/10 flex items-start sm:items-center gap-2 shadow-inner">
+          <span className="text-amber-300 font-bold shrink-0 flex items-center gap-1 whitespace-nowrap">
+            <span>💡</span> SOP Eksekusi:
+          </span>
+          <span className="text-slate-300 font-medium leading-normal">
+            {newsSafety.recommendation}
+          </span>
         </div>
       </div>
 
@@ -301,93 +351,97 @@ export const EconomicNewsCalendar: React.FC<EconomicNewsCalendarProps> = ({
                 {/* Event Summary Bar */}
                 <div
                   onClick={() => setExpandedEventId(isExpanded ? null : evt.id)}
-                  className="p-3 sm:p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
+                  className="p-3 sm:p-3.5 flex items-start sm:items-center justify-between gap-3 cursor-pointer select-none group"
                 >
-                  <div className="flex items-center gap-3">
-                    {/* Impact Flag */}
+                  <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                    {/* Impact & Country Badge */}
                     <div
-                      className={`w-9 h-9 rounded-xl flex flex-col items-center justify-center font-mono text-xs font-black shrink-0 ${
+                      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex flex-col items-center justify-center font-mono font-black shrink-0 shadow-inner mt-0.5 sm:mt-0 ${
                         isHigh
-                          ? "bg-rose-500/20 border border-rose-500/40 text-rose-400"
-                          : "bg-amber-500/20 border border-amber-500/40 text-amber-400"
+                          ? "bg-rose-500/15 border border-rose-500/40 text-rose-400"
+                          : "bg-amber-500/15 border border-amber-500/40 text-amber-400"
                       }`}
                     >
-                      <span className="text-[11px] leading-none">{evt.country}</span>
-                      <span className="text-[8px] opacity-75">{evt.currency}</span>
+                      <span className="text-[11px] leading-tight font-black">{evt.country}</span>
+                      <span className="text-[8px] opacity-75 font-semibold leading-tight">{evt.currency}</span>
                     </div>
 
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-extrabold text-sm text-slate-100">
+                    {/* Main Title & Metadata Details */}
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-extrabold text-xs sm:text-sm text-slate-100 group-hover:text-cyan-300 transition line-clamp-2 leading-snug">
                           {evt.title}
                         </span>
-                        <span
-                          className={`text-[9.5px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                            isHigh
-                              ? "bg-rose-950/80 text-rose-300 border-rose-600/40"
-                              : "bg-amber-950/80 text-amber-300 border-amber-600/40"
-                          }`}
-                        >
-                          {isHigh ? "HIGH IMPACT" : "MEDIUM"}
-                        </span>
-                        {isLiveNow && (
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-500 text-white animate-pulse">
-                            SEDANG RILIS
-                          </span>
-                        )}
-                        {isPassed && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
-                            SELESAI
-                          </span>
-                        )}
+                        <div className="sm:hidden shrink-0 text-slate-400 group-hover:text-white transition">
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-3 text-xs text-slate-400 font-mono mt-0.5">
-                        <span className="flex items-center gap-1 text-slate-300 font-semibold">
-                          <Clock className="w-3 h-3 text-amber-400" />
-                          {evt.dateStr}, {evt.timeStrWib}
-                        </span>
-                        <span>•</span>
-                        <span
-                          className={`font-bold ${
+                      {/* Structured Badges: Responsive Flex (Impact, Date & Time, Countdown) */}
+                      <div className="flex flex-wrap items-center gap-1.5 text-[9.5px] sm:text-[10.5px] font-mono">
+                        {/* 1. Impact Level / Live Status */}
+                        <div
+                          className={`px-2 py-0.5 rounded-lg border font-bold shrink-0 shadow-sm ${
                             isLiveNow
-                              ? "text-rose-400 animate-pulse"
-                              : isPassed
-                              ? "text-slate-500"
-                              : "text-cyan-400"
+                              ? "bg-rose-500 text-white font-black animate-pulse border-rose-400"
+                              : isHigh
+                              ? "bg-rose-950/90 text-rose-300 border-rose-500/40"
+                              : "bg-amber-950/90 text-amber-300 border-amber-500/40"
                           }`}
                         >
-                          {formatCountdown(evt.scheduledTimestamp)}
-                        </span>
+                          {isLiveNow ? "🔥 LIVE NOW" : isHigh ? "HIGH IMPACT" : "MEDIUM"}
+                        </div>
+
+                        {/* 2. Date & Time */}
+                        <div className="px-2 py-0.5 rounded-lg bg-slate-900/90 border border-slate-800 text-slate-300 font-semibold flex items-center gap-1 shrink-0 shadow-sm">
+                          <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 shrink-0" />
+                          <span>{evt.dateStr}</span>
+                          <span className="text-amber-300 font-bold">{evt.timeStrWib}</span>
+                        </div>
+
+                        {/* 3. Countdown / Selesai */}
+                        <div
+                          className={`px-2 py-0.5 rounded-lg border flex items-center gap-1 font-bold shrink-0 shadow-sm ${
+                            isPassed
+                              ? "bg-slate-900 border-slate-700 text-slate-400"
+                              : isLiveNow
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse"
+                              : isNear
+                              ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                              : "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
+                          }`}
+                        >
+                          <span>{isPassed ? "✓" : "⏱️"}</span>
+                          <span>
+                            {isPassed ? "Selesai" : formatCountdown(evt.scheduledTimestamp)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Numbers & Expand Arrow */}
-                  <div className="flex items-center gap-3">
-                    <div className="hidden sm:flex items-center gap-3 text-xs font-mono">
+                  {/* Desktop Right Side Numbers & Expand Button */}
+                  <div className="hidden sm:flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-2.5 text-xs font-mono">
                       {evt.actual && (
-                        <div className="text-right p-1 px-2 rounded-lg bg-slate-900 border border-slate-700">
+                        <div className="text-right p-1 px-2 rounded-lg bg-emerald-950/60 border border-emerald-500/40">
                           <span className="text-[9px] text-emerald-400 block uppercase font-bold">Aktual</span>
                           <span className="font-black text-white">{evt.actual}</span>
                         </div>
                       )}
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block uppercase">Forecast</span>
-                        <span className="font-bold text-slate-200">{evt.forecast}</span>
+                      <div className="text-right p-1 px-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                        <span className="text-[9px] text-slate-500 block uppercase font-bold">Forecast</span>
+                        <span className="font-bold text-cyan-300">{evt.forecast}</span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block uppercase">Prev</span>
-                        <span className="text-slate-400">{evt.previous}</span>
+                      <div className="text-right p-1 px-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                        <span className="text-[9px] text-slate-500 block uppercase font-bold">Prev</span>
+                        <span className="text-slate-400 font-semibold">{evt.previous}</span>
                       </div>
                     </div>
 
-                    <button
-                      className="p-1 rounded-lg text-slate-400 hover:text-white"
-                      aria-label="Rincian"
-                    >
+                    <div className="p-1 rounded-lg text-slate-400 group-hover:text-white transition">
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
+                    </div>
                   </div>
                 </div>
 

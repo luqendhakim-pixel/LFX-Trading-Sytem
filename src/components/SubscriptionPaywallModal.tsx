@@ -85,12 +85,8 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   )}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-gradient-to-b from-[#0e1629] via-[#090f1d] to-[#040711] border border-cyan-500/40 rounded-3xl p-5 sm:p-7 shadow-2xl text-slate-100 my-8 overflow-hidden">
-        {/* Glow decoration */}
-        <div className="absolute -top-24 -left-24 w-52 h-52 bg-cyan-500/25 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -right-24 w-52 h-52 bg-emerald-500/25 rounded-full blur-3xl pointer-events-none" />
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fadeIn overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-[#090f1d] border border-cyan-500/40 rounded-3xl p-5 sm:p-7 shadow-2xl text-slate-100 my-8">
         {onClose && (
           <button
             onClick={onClose}

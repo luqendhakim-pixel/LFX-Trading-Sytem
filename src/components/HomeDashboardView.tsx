@@ -30,8 +30,11 @@ import { LfxLogo } from "./LfxLogo";
 import { SignalWinRateHistoryModal } from "./SignalWinRateHistoryModal";
 import { EconomicNewsCalendar } from "./EconomicNewsCalendar";
 import { MultiTimeframeConfluenceGrid } from "./MultiTimeframeConfluenceGrid";
+import { DailyWinRateCalendarPicker } from "./DailyWinRateCalendarPicker";
 import {
   calculateDynamicHistoryWinRate,
+  calculateWinRateForDate,
+  formatDateKeyToIndo,
   PeriodFilter,
 } from "../utils/winratePipsCalculator";
 
@@ -72,6 +75,8 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
 }) => {
   const [showAndroidBanner, setShowAndroidBanner] = useState(true);
   const [activeWinRatePeriod, setActiveWinRatePeriod] = useState<PeriodFilter>("DAILY");
+  const [selectedCustomDate, setSelectedCustomDate] = useState<string | null>(null);
+  const [isCalendarPickerOpen, setIsCalendarPickerOpen] = useState(false);
   const [isWinRateModalOpen, setIsWinRateModalOpen] = useState(false);
   const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
   const [selectedTf, setSelectedTf] = useState<Timeframe>("H1");
@@ -81,12 +86,15 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
     currentUser?.identifier === "luqendhakim@gmail.com" ||
     currentUser?.identifier === "08123456789";
 
-  // Dynamic Winrate, Pips Profit/Loss, Hit TP/SL/BE calculations for all periods
+  // Dynamic Winrate, Pips Profit/Loss, Hit TP/SL/BE calculations for all periods & custom date
   const dynamicHistory = useMemo(() => {
     return calculateDynamicHistoryWinRate(signalsList);
   }, [signalsList]);
 
   const activeMetrics = useMemo(() => {
+    if (activeWinRatePeriod === "CUSTOM_DATE" && selectedCustomDate) {
+      return calculateWinRateForDate(signalsList, selectedCustomDate);
+    }
     switch (activeWinRatePeriod) {
       case "DAILY":
         return dynamicHistory.daily;
@@ -98,7 +106,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
       default:
         return dynamicHistory.allTime;
     }
-  }, [dynamicHistory, activeWinRatePeriod]);
+  }, [dynamicHistory, activeWinRatePeriod, selectedCustomDate, signalsList]);
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -122,7 +130,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   return (
     <div
       id="home-dashboard-view"
-      className="w-full max-w-lg md:max-w-3xl mx-auto pb-28 pt-2 px-3 sm:px-4 text-slate-100 space-y-4 animate-fadeIn"
+      className="w-full max-w-full lg:max-w-7xl xl:max-w-[1600px] mx-auto pb-28 pt-2 px-2 sm:px-4 md:px-6 text-slate-100 space-y-4 sm:space-y-5 animate-fadeIn"
     >
       {/* Dynamic Winrate & Pips History Modal */}
       <SignalWinRateHistoryModal
@@ -130,19 +138,21 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
         onClose={() => setIsWinRateModalOpen(false)}
         signalsList={signalsList}
         onSelectSignal={onSelectSignal}
+        initialPeriod={activeWinRatePeriod}
+        initialDateKey={selectedCustomDate}
       />
 
       {/* 0. Top Main Brand Header Bar with LFX Logo */}
-      <div className="flex items-center justify-between py-2 px-3 sm:px-4 rounded-2xl bg-[#060a15]/90 border border-slate-800/80 backdrop-blur-md shadow-lg">
+      <div className="flex items-center justify-between py-2.5 px-3 sm:px-5 rounded-2xl bg-[#060a15] border border-slate-800/80 shadow-lg">
         {/* Left: LFX TRADING SYSTEM Official Logo */}
         <div className="flex items-center gap-3">
           <div className="relative group cursor-pointer" onClick={() => onNavigateToTab("BERANDA")}>
-            <LfxLogo variant="full" className="h-11 sm:h-12 transition-transform group-hover:scale-105" />
+            <LfxLogo variant="full" className="h-10 sm:h-12 transition-transform group-hover:scale-105" />
           </div>
         </div>
 
         {/* Right: Live Market & Actions */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] font-bold text-emerald-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             <span>XAU/USD LIVE</span>
@@ -247,20 +257,24 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
           )}
         </div>
 
-        {/* Right (Red Box Area): Dynamic Winrate & Pips History Menu */}
+        {/* Right (Red Box Area): Dynamic Winrate & Pips History Menu + Daily Calendar Picker */}
         <div
           id="winrate-history-menu-bar"
-          className="flex items-center gap-1.5 bg-[#070e1c] border border-cyan-500/30 hover:border-cyan-500/60 p-1.5 rounded-2xl shadow-xl backdrop-blur-md transition group"
+          className="relative flex items-center gap-1.5 bg-[#070e1c] border border-cyan-500/30 hover:border-cyan-500/60 p-1.5 rounded-2xl shadow-xl transition group"
         >
-          {/* Quick Period Selector Tabs */}
+          {/* Quick Period Selector Tabs + Calendar Picker Button */}
           <div className="flex items-center bg-[#040812] rounded-xl p-0.5 border border-slate-800">
             {(["DAILY", "WEEKLY", "MONTHLY"] as PeriodFilter[]).map((periodKey) => {
-              const isSelected = activeWinRatePeriod === periodKey;
+              const isSelected = activeWinRatePeriod === periodKey && !selectedCustomDate;
               const shortLabel = periodKey === "DAILY" ? "Daily" : periodKey === "WEEKLY" ? "Weekly" : "Monthly";
               return (
                 <button
                   key={periodKey}
-                  onClick={() => setActiveWinRatePeriod(periodKey)}
+                  onClick={() => {
+                    setActiveWinRatePeriod(periodKey);
+                    setSelectedCustomDate(null);
+                    setIsCalendarPickerOpen(false);
+                  }}
                   className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
                     isSelected
                       ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
@@ -271,7 +285,45 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
                 </button>
               );
             })}
+
+            {/* Daily Calendar Date Picker Button */}
+            <button
+              id="btn-calendar-daily-picker"
+              onClick={() => setIsCalendarPickerOpen((prev) => !prev)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ml-0.5 border ${
+                activeWinRatePeriod === "CUSTOM_DATE" && selectedCustomDate
+                  ? "bg-cyan-500 text-black border-cyan-400 font-black shadow-md"
+                  : isCalendarPickerOpen
+                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                  : "text-slate-400 hover:text-cyan-300 hover:bg-slate-800/40 border-transparent"
+              }`}
+              title="Pilih Kalender Tanggal Harian"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">
+                {activeWinRatePeriod === "CUSTOM_DATE" && selectedCustomDate
+                  ? formatDateKeyToIndo(selectedCustomDate).split(" ").slice(0, 2).join(" ")
+                  : "Kalender"}
+              </span>
+            </button>
           </div>
+
+          {/* Daily Winrate Calendar Popover */}
+          <DailyWinRateCalendarPicker
+            isOpen={isCalendarPickerOpen}
+            onClose={() => setIsCalendarPickerOpen(false)}
+            selectedDateKey={activeWinRatePeriod === "CUSTOM_DATE" ? selectedCustomDate : null}
+            onSelectDate={(dateKey) => {
+              if (dateKey) {
+                setSelectedCustomDate(dateKey);
+                setActiveWinRatePeriod("CUSTOM_DATE");
+              } else {
+                setSelectedCustomDate(null);
+                setActiveWinRatePeriod("DAILY");
+              }
+            }}
+            signalsList={signalsList}
+          />
 
           {/* Detailed History Modal Open Button */}
           <button
@@ -291,252 +343,277 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Card Banner: PERFORMA SINYAL (Dynamically linked to selected period) */}
-      <div
-        onClick={() => setIsWinRateModalOpen(true)}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c1630] via-[#091124] to-[#060a16] border border-slate-800/90 hover:border-cyan-500/40 p-4 sm:p-5 shadow-2xl transition cursor-pointer group"
-      >
-        <div className="relative z-10 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                PERFORMA SINYAL ({activeMetrics.label.toUpperCase()})
-              </span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
-                Klik Rincian
-              </span>
-            </div>
-            <div className="text-xs text-slate-400 mt-1">
-              {activeMetrics.winRatePercent}% winrate • {activeMetrics.totalClosedSignals} sinyal close
-            </div>
-
-            {/* Quick Hit Counter Badges */}
-            <div className="flex items-center gap-2 mt-2 flex-wrap text-[10px] font-mono font-bold">
-              <span className="px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> TP: {activeMetrics.totalHitTpCount}x (+{activeMetrics.profitPips}p)
-              </span>
-              <span className="px-2 py-0.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center gap-1">
-                <XCircle className="w-3 h-3" /> SL: {activeMetrics.hitSlCount}x (-{activeMetrics.lossPips}p)
-              </span>
-              <span className="px-2 py-0.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300 flex items-center gap-1">
-                <Scale className="w-3 h-3" /> BE: {activeMetrics.hitBeCount}x
-              </span>
-            </div>
-          </div>
-
-          <div className="text-right">
-            <div className={`text-2xl sm:text-3xl font-black tracking-tight ${
-              activeMetrics.netPips >= 0 ? "text-emerald-400" : "text-rose-400"
-            }`}>
-              {activeMetrics.netPips >= 0 ? `+${activeMetrics.netPips.toLocaleString()}` : activeMetrics.netPips.toLocaleString()} pips
-            </div>
-            <div className="text-[11px] text-slate-400 mt-0.5 flex items-center justify-end gap-1 group-hover:text-cyan-300 transition">
-              <span>Lihat Detail</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </div>
-          </div>
-        </div>
-
-        {/* Radiant Neon Green Sparkline Chart across bottom */}
-        <div className="mt-3 -mx-4 -mb-4 pt-2">
-          <svg viewBox="0 0 300 50" className="w-full h-12 stroke-emerald-400 fill-emerald-500/10">
-            <defs>
-              <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-                <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,45 Q30,42 60,38 T120,30 T180,32 T240,20 T300,10 L300,50 L0,50 Z"
-              fill="url(#sparklineGrad)"
-            />
-            <path
-              d="M0,45 Q30,42 60,38 T120,30 T180,32 T240,20 T300,10"
-              fill="none"
-              stroke="#10b981"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-            />
-          </svg>
-        </div>
-      </div>
-
-      {/* Modal: Full Economic News Calendar */}
-      {isNewsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-[#080d1a] border border-slate-700 shadow-2xl p-1">
-            <button
-              onClick={() => setIsNewsModalOpen(false)}
-              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <EconomicNewsCalendar onClose={() => setIsNewsModalOpen(false)} />
-          </div>
-        </div>
-      )}
-
-      {/* 2.6 Red Folder News Live Volatility Status Bar */}
-      <div onClick={() => setIsNewsModalOpen(true)} className="cursor-pointer">
-        <EconomicNewsCalendar compact={true} />
-      </div>
-
-      {/* 3. Android App / Realtime Push Notification Banner */}
-      {showAndroidBanner && (
-        <div className="relative flex items-center justify-between p-3 sm:p-3.5 bg-[#0f172a]/90 border border-amber-500/30 rounded-2xl shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
-              <Smartphone className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-xs sm:text-sm font-bold text-white">
-                Notifikasi Sinyal Bilah Status HP (WhatsApp-Style)
-              </h4>
-              <p className="text-[11px] text-slate-400">
-                Muncul di lockscreen & bar notifikasi HP saat diminimize
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onRequestPushNotification}
-              className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-2.5 py-1 rounded-lg text-[11px] font-black shrink-0 shadow transition cursor-pointer"
-            >
-              {pushNotificationEnabled ? "Aktif ✓" : "Aktifkan"}
-            </button>
-            <button
-              onClick={() => setShowAndroidBanner(false)}
-              className="text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 4. Live TradingView Chart Preview Section */}
-      <div className="bg-[#080c18] border border-slate-800 rounded-3xl p-3 sm:p-4 space-y-3 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-extrabold text-white">XAU/USD</span>
-          </div>
-
-          <a
-            href="https://www.tradingview.com/symbols/XAUUSD/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 font-mono font-bold"
+      {/* Responsive Grid on Laptop/Desktop: 2 Columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
+        {/* Left Column (Performa Sinyal & Live TradingView Chart) */}
+        <div className="lg:col-span-7 space-y-4 sm:space-y-5">
+          {/* 2. Card Banner: PERFORMA SINYAL (Dynamically linked to selected period) */}
+          <div
+            onClick={() => setIsWinRateModalOpen(true)}
+            className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c1630] via-[#091124] to-[#060a16] border border-slate-800/90 hover:border-cyan-500/40 p-4 sm:p-5 shadow-2xl transition cursor-pointer group"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>live • TradingView</span>
-            <ExternalLink className="w-3 h-3 ml-0.5" />
-          </a>
-        </div>
-
-        {/* Timeframe pills */}
-        <div className="flex items-center gap-1.5">
-          {(["M1", "M5", "M15", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
-            <button
-              key={tf}
-              onClick={() => setSelectedTf(tf)}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                selectedTf === tf
-                  ? "bg-sky-500 text-slate-950 shadow font-black"
-                  : "bg-[#0d1326] text-slate-400 hover:text-slate-200 border border-slate-800"
-              }`}
-            >
-              {tf === "M1" ? "1m" : tf === "M5" ? "5m" : tf === "M15" ? "15m" : tf === "H1" ? "1H" : tf === "H4" ? "4H" : "D1"}
-            </button>
-          ))}
-        </div>
-
-        {/* Direct TradingView Widget Container */}
-        <div className="w-full h-80 rounded-2xl overflow-hidden border border-slate-800/80 bg-[#05070c]">
-          <TradingViewWidget symbol="OANDA:XAUUSD" theme="dark" timeframe={selectedTf} />
-        </div>
-      </div>
-
-      {/* 5. Matrix Konfluensi Multi-Timeframe (M1 - D1 Grid) */}
-      <MultiTimeframeConfluenceGrid
-        currentPrice={currentPrice}
-        selectedTimeframe={selectedTf}
-        onSelectTimeframe={(tf) => setSelectedTf(tf)}
-      />
-
-      {/* 6. Section: Signal Terbaru */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between px-1">
-          <h3 className="text-sm font-black text-slate-200">Signal Terbaru</h3>
-          <button
-            onClick={() => onNavigateToTab("SIGNAL")}
-            className="text-xs text-sky-400 hover:text-sky-300 font-semibold cursor-pointer"
-          >
-            Lihat semua
-          </button>
-        </div>
-
-        {/* Signal Cards */}
-        <div className="space-y-2">
-          {signalsList.slice(0, 4).map((sig) => {
-            const isBuy = sig.signalType.includes("BUY");
-            const price = sig.entryPrice.toFixed(3);
-            const status = sig.signalStatus || (sig.status === "ACTIVE" ? "ACTIVE" : "CLOSED");
-
-            return (
-              <div
-                key={sig.id}
-                onClick={() => onSelectSignal(sig)}
-                className="relative flex items-center justify-between p-3.5 bg-[#0b1021] hover:bg-[#0f172e] border border-slate-800/90 rounded-2xl transition cursor-pointer active:scale-98 shadow-sm group"
-              >
-                {/* Left Colored Accent Bar */}
-                <div
-                  className={`absolute left-0 top-3 bottom-3 w-1.5 rounded-r-full ${
-                    isBuy ? "bg-emerald-500" : "bg-rose-500"
-                  }`}
-                ></div>
-
-                {/* Signal Action & Symbol */}
-                <div className="flex items-center gap-2 pl-2">
-                  <span
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase ${
-                      isBuy
-                        ? "bg-emerald-950/80 text-emerald-400 border border-emerald-500/40"
-                        : "bg-rose-950/80 text-rose-400 border border-rose-500/40"
-                    }`}
-                  >
-                    {isBuy ? "BUY" : "SELL"}
-                  </span>
-                  <span className="font-extrabold text-sm text-white">{sig.symbol || "XAUUSD"}</span>
+            <div className="relative z-10 space-y-3">
+              {/* Top Row: Title, Winrate, & Net Pips */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    <span className="text-[11px] sm:text-xs font-black tracking-wider text-slate-300 uppercase whitespace-nowrap">
+                      PERFORMA SINYAL
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30 whitespace-nowrap">
+                      {activeWinRatePeriod === "CUSTOM_DATE" && selectedCustomDate
+                        ? `TANGGAL: ${formatDateKeyToIndo(selectedCustomDate).toUpperCase()}`
+                        : activeWinRatePeriod === "DAILY"
+                        ? "HARIAN (24 JAM)"
+                        : activeWinRatePeriod === "WEEKLY"
+                        ? "MINGGUAN (7 HARI)"
+                        : activeWinRatePeriod === "MONTHLY"
+                        ? "BULANAN (30 HARI)"
+                        : "SEMUA WAKTU"}
+                    </span>
+                  </div>
+                  <div className="text-[11px] sm:text-xs text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className="font-semibold text-emerald-400 font-mono">{activeMetrics.winRatePercent}% Win Rate</span>
+                    <span className="text-slate-600">•</span>
+                    <span>{activeMetrics.totalClosedSignals} Sinyal Selesai</span>
+                  </div>
                 </div>
 
-                {/* Price, Pips & Status Badge */}
-                <div className="flex items-center gap-2.5">
-                  {status !== "ACTIVE" && typeof sig.realizedPips === "number" && (
-                    <span
-                      className={`text-xs font-mono font-black ${
-                        sig.realizedPips > 0
-                          ? "text-emerald-400"
-                          : sig.realizedPips < 0
-                          ? "text-rose-400"
-                          : "text-slate-400"
-                      }`}
-                    >
-                      {sig.realizedPips > 0 ? `+${sig.realizedPips}` : sig.realizedPips} pips
-                    </span>
-                  )}
-                  <span className="font-mono font-bold text-sm text-slate-200">{price}</span>
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${getStatusBadge(
-                      status
-                    )}`}
-                  >
-                    {status}
-                  </span>
+                <div className="text-right shrink-0">
+                  <div className={`text-2xl sm:text-3xl font-black tracking-tight ${
+                    activeMetrics.netPips >= 0 ? "text-emerald-400" : "text-rose-400"
+                  }`}>
+                    {activeMetrics.netPips >= 0 ? `+${activeMetrics.netPips.toLocaleString()}` : activeMetrics.netPips.toLocaleString()} pips
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5 flex items-center justify-end gap-1 group-hover:text-cyan-300 transition">
+                    <span>Lihat Detail</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </div>
                 </div>
               </div>
-            );
-          })}
+
+              {/* Quick Hit Counter Badges: 3 Sejajar Presisi (TP, SL, BE) */}
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2 pt-0.5 text-[9.5px] sm:text-[10.5px] font-mono font-bold">
+                <span className="px-2 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center gap-1 whitespace-nowrap shadow-sm">
+                  <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-400" />
+                  <span>TP: {activeMetrics.totalHitTpCount}x (+{activeMetrics.profitPips}p)</span>
+                </span>
+                <span className="px-2 py-1 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-1 whitespace-nowrap shadow-sm">
+                  <XCircle className="w-3 h-3 shrink-0 text-rose-400" />
+                  <span>SL: {activeMetrics.hitSlCount}x (-{activeMetrics.lossPips}p)</span>
+                </span>
+                <span className="px-2 py-1 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 flex items-center justify-center gap-1 whitespace-nowrap shadow-sm">
+                  <Scale className="w-3 h-3 shrink-0 text-blue-400" />
+                  <span>BE: {activeMetrics.hitBeCount}x</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Radiant Neon Green Sparkline Chart across bottom */}
+            <div className="mt-3 -mx-4 -mb-4 pt-2">
+              <svg viewBox="0 0 300 50" className="w-full h-12 stroke-emerald-400 fill-emerald-500/10">
+                <defs>
+                  <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M0,45 Q30,42 60,38 T120,30 T180,32 T240,20 T300,10 L300,50 L0,50 Z"
+                  fill="url(#sparklineGrad)"
+                />
+                <path
+                  d="M0,45 Q30,42 60,38 T120,30 T180,32 T240,20 T300,10"
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          </div>
+
+          {/* 4. Live TradingView Chart Preview Section */}
+          <div className="bg-[#080c18] border border-slate-800 rounded-3xl p-3 sm:p-4 space-y-3 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base font-extrabold text-white">XAU/USD</span>
+              </div>
+
+              <a
+                href="https://www.tradingview.com/symbols/XAUUSD/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 font-mono font-bold"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>live • TradingView</span>
+                <ExternalLink className="w-3 h-3 ml-0.5" />
+              </a>
+            </div>
+
+            {/* Timeframe pills */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {(["M1", "M5", "M15", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => setSelectedTf(tf)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    selectedTf === tf
+                      ? "bg-sky-500 text-slate-950 shadow font-black"
+                      : "bg-[#0d1326] text-slate-400 hover:text-slate-200 border border-slate-800"
+                  }`}
+                >
+                  {tf === "M1" ? "1m" : tf === "M5" ? "5m" : tf === "M15" ? "15m" : tf === "H1" ? "1H" : tf === "H4" ? "4H" : "D1"}
+                </button>
+              ))}
+            </div>
+
+            {/* Direct TradingView Widget Container */}
+            <div className="w-full h-80 lg:h-[420px] rounded-2xl overflow-hidden border border-slate-800/80 bg-[#05070c]">
+              <TradingViewWidget symbol="OANDA:XAUUSD" theme="dark" timeframe={selectedTf} />
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column (News, Multi-Timeframe Matrix, & Sinyal Terbaru) */}
+        <div className="lg:col-span-5 space-y-4 sm:space-y-5">
+          {/* Modal: Full Economic News Calendar */}
+          {isNewsModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 animate-fadeIn">
+              <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-[#080d1a] border border-slate-700 shadow-2xl p-1">
+                <button
+                  onClick={() => setIsNewsModalOpen(false)}
+                  className="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <EconomicNewsCalendar onClose={() => setIsNewsModalOpen(false)} />
+              </div>
+            </div>
+          )}
+
+          {/* 2.6 Red Folder News Live Volatility Status Bar */}
+          <div onClick={() => setIsNewsModalOpen(true)} className="cursor-pointer">
+            <EconomicNewsCalendar compact={true} />
+          </div>
+
+          {/* 3. Android App / Realtime Push Notification Banner */}
+          {showAndroidBanner && (
+            <div className="relative flex items-center justify-between p-3 sm:p-3.5 bg-[#0f172a]/90 border border-amber-500/30 rounded-2xl shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-white">
+                    Notifikasi Sinyal Bilah Status HP
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Muncul di lockscreen & bar notifikasi HP saat diminimize
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onRequestPushNotification}
+                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-2.5 py-1 rounded-lg text-[11px] font-black shrink-0 shadow transition cursor-pointer"
+                >
+                  {pushNotificationEnabled ? "Aktif ✓" : "Aktifkan"}
+                </button>
+                <button
+                  onClick={() => setShowAndroidBanner(false)}
+                  className="text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 5. Matrix Konfluensi Multi-Timeframe (M1 - D1 Grid) */}
+          <MultiTimeframeConfluenceGrid
+            currentPrice={currentPrice}
+            selectedTimeframe={selectedTf}
+            onSelectTimeframe={(tf) => setSelectedTf(tf)}
+          />
+
+          {/* 6. Section: Signal Terbaru */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-sm font-black text-slate-200">Signal Terbaru</h3>
+              <button
+                onClick={() => onNavigateToTab("SIGNAL")}
+                className="text-xs text-sky-400 hover:text-sky-300 font-semibold cursor-pointer"
+              >
+                Lihat semua
+              </button>
+            </div>
+
+            {/* Signal Cards */}
+            <div className="space-y-2">
+              {signalsList.slice(0, 5).map((sig) => {
+                const isBuy = sig.signalType.includes("BUY");
+                const price = sig.entryPrice.toFixed(3);
+                const status = sig.signalStatus || (sig.status === "ACTIVE" ? "ACTIVE" : "CLOSED");
+
+                return (
+                  <div
+                    key={sig.id}
+                    onClick={() => onSelectSignal(sig)}
+                    className="relative flex items-center justify-between p-3.5 bg-[#0b1021] hover:bg-[#0f172e] border border-slate-800/90 rounded-2xl transition cursor-pointer active:scale-98 shadow-sm group"
+                  >
+                    {/* Left Colored Accent Bar */}
+                    <div
+                      className={`absolute left-0 top-3 bottom-3 w-1.5 rounded-r-full ${
+                        isBuy ? "bg-emerald-500" : "bg-rose-500"
+                      }`}
+                    ></div>
+
+                    {/* Signal Action & Symbol */}
+                    <div className="flex items-center gap-2 pl-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase ${
+                          isBuy
+                            ? "bg-emerald-950/80 text-emerald-400 border border-emerald-500/40"
+                            : "bg-rose-950/80 text-rose-400 border border-rose-500/40"
+                        }`}
+                      >
+                        {isBuy ? "BUY" : "SELL"}
+                      </span>
+                      <span className="font-extrabold text-sm text-white">{sig.symbol || "XAUUSD"}</span>
+                    </div>
+
+                    {/* Price, Pips & Status Badge */}
+                    <div className="flex items-center gap-2.5">
+                      {status !== "ACTIVE" && typeof sig.realizedPips === "number" && (
+                        <span
+                          className={`text-xs font-mono font-black ${
+                            sig.realizedPips > 0
+                              ? "text-emerald-400"
+                              : sig.realizedPips < 0
+                              ? "text-rose-400"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          {sig.realizedPips > 0 ? `+${sig.realizedPips}` : sig.realizedPips} pips
+                        </span>
+                      )}
+                      <span className="font-mono font-bold text-sm text-slate-200">{price}</span>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${getStatusBadge(
+                          status
+                        )}`}
+                      >
+                        {status}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -94,8 +94,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-gradient-to-b from-[#0c1324] via-[#080d19] to-[#04060c] border border-cyan-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fadeIn overflow-y-auto">
+      <div className="relative w-full max-w-2xl lg:max-w-4xl bg-gradient-to-b from-[#0c1324] via-[#080d19] to-[#04060c] border border-cyan-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 my-8">
         {/* Close */}
         <button
           onClick={onClose}

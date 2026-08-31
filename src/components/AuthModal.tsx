@@ -199,12 +199,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-gradient-to-b from-[#0e1629] via-[#090f1d] to-[#040711] border border-slate-700/80 rounded-3xl p-6 sm:p-7 shadow-2xl text-slate-100 overflow-hidden">
-        {/* Glow decoration */}
-        <div className="absolute -top-24 -left-24 w-48 h-48 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fadeIn">
+      <div className="relative w-full max-w-md bg-[#090f1d] border border-slate-700/80 rounded-3xl p-6 sm:p-7 shadow-2xl text-slate-100">
         {/* Close Button if dismissible */}
         {onClose && (
           <button

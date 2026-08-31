@@ -26,9 +26,9 @@ export const MobileAppNav: React.FC<MobileAppNavProps> = ({
   return (
     <nav
       id="mobile-bottom-navbar"
-      className="fixed bottom-0 left-0 right-0 z-50 bg-[#070b18]/95 backdrop-blur-xl border-t border-slate-800/80 px-2 py-1.5 sm:py-2 select-none shadow-2xl shadow-black/80"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[#070b18]/95 backdrop-blur-md border-t border-slate-800 px-2 py-1.5 sm:py-2 select-none shadow-2xl shadow-black"
     >
-      <div className="max-w-md md:max-w-2xl mx-auto flex items-center justify-around">
+      <div className="w-full max-w-md md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto flex items-center justify-around">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

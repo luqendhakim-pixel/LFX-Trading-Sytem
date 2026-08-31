@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   X,
   Trophy,
@@ -17,12 +17,18 @@ import {
   CheckCircle2,
   XCircle,
   Scale,
+  CalendarDays,
+  ChevronDown,
 } from "lucide-react";
 import { AISignal } from "../types";
 import {
   calculateDynamicHistoryWinRate,
+  calculateWinRateForDate,
   PeriodFilter,
   extractSignalPips,
+  formatDateKeyToIndo,
+  getAvailableSignalDates,
+  toDateKey,
 } from "../utils/winratePipsCalculator";
 
 interface SignalWinRateHistoryModalProps {
@@ -30,6 +36,8 @@ interface SignalWinRateHistoryModalProps {
   onClose: () => void;
   signalsList: AISignal[];
   onSelectSignal?: (signal: AISignal) => void;
+  initialPeriod?: PeriodFilter;
+  initialDateKey?: string | null;
 }
 
 export const SignalWinRateHistoryModal: React.FC<SignalWinRateHistoryModalProps> = ({
@@ -37,15 +45,36 @@ export const SignalWinRateHistoryModal: React.FC<SignalWinRateHistoryModalProps>
   onClose,
   signalsList,
   onSelectSignal,
+  initialPeriod = "DAILY",
+  initialDateKey = null,
 }) => {
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>("DAILY");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>(initialPeriod);
+  const [selectedCustomDate, setSelectedCustomDate] = useState<string | null>(initialDateKey);
   const [outcomeFilter, setOutcomeFilter] = useState<"ALL" | "TP" | "SL" | "BE">("ALL");
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedPeriod(initialPeriod);
+      setSelectedCustomDate(initialDateKey);
+    }
+  }, [isOpen, initialPeriod, initialDateKey]);
+
+  const dynamicHistory = useMemo(
+    () => calculateDynamicHistoryWinRate(signalsList),
+    [signalsList]
+  );
+
+  const availableDates = useMemo(
+    () => getAvailableSignalDates(signalsList),
+    [signalsList]
+  );
 
   if (!isOpen) return null;
 
-  const dynamicHistory = calculateDynamicHistoryWinRate(signalsList);
   const currentMetrics =
-    selectedPeriod === "DAILY"
+    selectedPeriod === "CUSTOM_DATE" && selectedCustomDate
+      ? calculateWinRateForDate(signalsList, selectedCustomDate)
+      : selectedPeriod === "DAILY"
       ? dynamicHistory.daily
       : selectedPeriod === "WEEKLY"
       ? dynamicHistory.weekly
@@ -71,7 +100,7 @@ export const SignalWinRateHistoryModal: React.FC<SignalWinRateHistoryModalProps>
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 animate-fadeIn">
       <div
         id="winrate-history-modal"
         className="relative w-full max-w-2xl max-h-[90vh] bg-[#070c18] border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100 animate-scaleUp"
@@ -123,7 +152,10 @@ export const SignalWinRateHistoryModal: React.FC<SignalWinRateHistoryModalProps>
               return (
                 <button
                   key={p.id}
-                  onClick={() => setSelectedPeriod(p.id)}
+                  onClick={() => {
+                    setSelectedPeriod(p.id);
+                    setSelectedCustomDate(null);
+                  }}
                   className={`flex flex-col items-center py-2.5 px-2 rounded-xl transition cursor-pointer text-center ${
                     isSelected
                       ? "bg-gradient-to-b from-cyan-950/80 to-[#0e1c3a] border border-cyan-500/50 shadow-md text-white"
@@ -145,6 +177,62 @@ export const SignalWinRateHistoryModal: React.FC<SignalWinRateHistoryModalProps>
                 </button>
               );
             })}
+          </div>
+
+          {/* 1.5 Quick Calendar Date Selector Bar */}
+          <div className="p-2.5 rounded-2xl bg-[#060b17] border border-cyan-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-cyan-400 shrink-0" />
+              <div className="text-xs font-bold text-slate-300">
+                <span>Filter Kalender Spesifik:</span>
+                {selectedPeriod === "CUSTOM_DATE" && selectedCustomDate && (
+                  <span className="ml-1.5 px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono text-[11px] border border-cyan-500/40">
+                    {formatDateKeyToIndo(selectedCustomDate)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5 scrollbar-none">
+              {availableDates.slice(0, 5).map((d) => {
+                const isSelected = selectedPeriod === "CUSTOM_DATE" && selectedCustomDate === d.dateKey;
+                return (
+                  <button
+                    key={d.dateKey}
+                    onClick={() => {
+                      setSelectedPeriod("CUSTOM_DATE");
+                      setSelectedCustomDate(d.dateKey);
+                    }}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 transition cursor-pointer border flex items-center gap-1 ${
+                      isSelected
+                        ? "bg-cyan-500 text-black border-cyan-400 font-black shadow"
+                        : "bg-slate-900 text-slate-300 border-slate-800 hover:border-cyan-500/50"
+                    }`}
+                  >
+                    <span>{d.label.split(" ").slice(0, 2).join(" ")}</span>
+                    <span className={isSelected ? "text-black font-black" : d.netPips >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                      ({d.winRate}%)
+                    </span>
+                  </button>
+                );
+              })}
+
+              <label className="px-2 py-1 rounded-lg text-[10px] font-bold shrink-0 transition cursor-pointer border bg-slate-900 text-cyan-400 border-slate-800 hover:border-cyan-500 flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                <span>Pilih Tgl</span>
+                <input
+                  type="date"
+                  className="sr-only"
+                  value={selectedCustomDate || ""}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setSelectedPeriod("CUSTOM_DATE");
+                      setSelectedCustomDate(e.target.value);
+                    }
+                  }}
+                />
+              </label>
+            </div>
           </div>
 
           {/* 2. Key 4 Pips & Win Rate Metric Cards */}

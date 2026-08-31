@@ -487,6 +487,7 @@ export function generateInstantSignal(
   return {
     id: `SIG-${timeframe}-${Date.now().toString().slice(-5)}`,
     symbol: "XAUUSD",
+    createdAt: Date.now(),
     timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
     formattedTimeWib: currentWibTime,
     session: getTradingSessionName(),

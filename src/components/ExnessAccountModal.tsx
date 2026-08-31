@@ -84,7 +84,7 @@ export const ExnessAccountModal: React.FC<ExnessAccountModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fadeIn">
       <div
         id="exness-account-modal"
         className="w-full max-w-lg bg-[#0f1420] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden text-slate-100"

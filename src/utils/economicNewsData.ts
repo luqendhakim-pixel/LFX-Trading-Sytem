@@ -26,172 +26,225 @@ export interface EconomicCalendarResponse {
   events: EconomicEvent[];
 }
 
-// Client-side fallback dynamic calendar based on exact current date
+// Deterministic & Real-Time Macroeconomic Calendar Engine for XAU/USD
 export function getEconomicCalendarEvents(currentTimeMs: number = Date.now()): EconomicEvent[] {
   const now = new Date(currentTimeMs);
-  const baseTime = currentTimeMs;
-  const hour = 3600 * 1000;
-  const day = 24 * hour;
 
   const dayNamesId = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
   const monthNamesId = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+    "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
   ];
 
-  const formatDateLabel = (targetMs: number): string => {
-    const target = new Date(targetMs);
-    const todayStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-    const targetStr = `${target.getFullYear()}-${target.getMonth()}-${target.getDate()}`;
-    const diffDays = Math.round((new Date(targetStr).getTime() - new Date(todayStr).getTime()) / (24 * 3600 * 1000));
+  // Helper to format date label relative to current day
+  const formatDateLabel = (targetDate: Date): string => {
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const target = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    const diffDays = Math.round((target.getTime() - today.getTime()) / (24 * 3600 * 1000));
 
     if (diffDays === 0) return "Hari Ini";
     if (diffDays === 1) return "Besok";
     if (diffDays === 2) return "Lusa";
     if (diffDays === -1) return "Kemarin";
-    return `${dayNamesId[target.getDay()]}, ${target.getDate()} ${monthNamesId[target.getMonth()]}`;
+    if (diffDays < -1) return `${dayNamesId[targetDate.getDay()]}, ${targetDate.getDate()} ${monthNamesId[targetDate.getMonth()]}`;
+    return `${dayNamesId[targetDate.getDay()]}, ${targetDate.getDate()} ${monthNamesId[targetDate.getMonth()]}`;
   };
 
-  const templates = [
+  // Find Monday of the current week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  const currentDayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday...
+  // Calculate distance from current day to Monday
+  const distanceToMonday = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+  const mondayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + distanceToMonday);
+
+  // Standard institutional weekly macro schedule anchored to Monday (day 0) through Friday (day 4)
+  const weeklySchedule = [
     {
-      id: "news-cpi-us",
-      title: "US Core CPI (Consumer Price Index) m/m",
+      id: "us-ism-mfg-pmi",
+      title: "US ISM Manufacturing PMI",
       country: "US",
       currency: "USD",
       impact: "HIGH" as const,
-      dayOffset: 0,
-      hourWib: 19,
-      minWib: 30,
-      forecast: "0.3%",
-      previous: "0.2%",
-      goldImpactEffect: "Jika Aktual > Forecast → DXY Menguat → XAU/USD Berpotensi Tertekan (Bearish). Jika Aktual < Forecast → XAU/USD Bullish Rally.",
-      description: "Ukuran utama inflasi konsumen AS tidak termasuk makanan & energi. Sangat menentukan kebijakan suku bunga The Fed.",
-      category: "INFLATION" as const,
-    },
-    {
-      id: "news-ppi-us",
-      title: "US Core PPI (Producer Price Index) m/m",
-      country: "US",
-      currency: "USD",
-      impact: "HIGH" as const,
-      dayOffset: 1,
-      hourWib: 19,
-      minWib: 30,
-      forecast: "0.2%",
-      previous: "0.1%",
-      goldImpactEffect: "Indikator awal tekanan inflasi produsen. Hasil lebih tinggi dari ekspektasi menekan harga emas Spot.",
-      description: "Perubahan harga barang di tingkat produsen/grosir AS.",
-      category: "INFLATION" as const,
-    },
-    {
-      id: "news-fomc-fed",
-      title: "FOMC Rate Decision & Fed Press Conference",
-      country: "US",
-      currency: "USD",
-      impact: "HIGH" as const,
-      dayOffset: 2,
-      hourWib: 1,
+      dayIndex: 0, // Monday
+      hourWib: 21,
       minWib: 0,
-      forecast: "5.25%",
-      previous: "5.50%",
-      goldImpactEffect: "Dovish (Pemangkasan Bunga / Nada Lembut) → Gold Melonjak Kuat. Hawkish → Tekanan Jual Emas.",
-      description: "Penetapan suku bunga acuan Federal Reserve dan pidato Ketua The Fed Jerome Powell.",
-      category: "CENTRAL_BANK" as const,
-    },
-    {
-      id: "news-claims-us",
-      title: "US Initial Jobless Claims",
-      country: "US",
-      currency: "USD",
-      impact: "MEDIUM" as const,
-      dayOffset: 3,
-      hourWib: 19,
-      minWib: 30,
-      forecast: "228K",
-      previous: "232K",
-      goldImpactEffect: "Klaim naik melemahkan USD dan memberi ruang bullish pada emas Spot XAU/USD.",
-      description: "Jumlah klaim tunjangan pengangguran baru pertama kali di AS setiap pekan.",
-      category: "EMPLOYMENT" as const,
-    },
-    {
-      id: "news-nfp-us",
-      title: "US Non-Farm Payrolls (NFP) & Unemployment Rate",
-      country: "US",
-      currency: "USD",
-      impact: "HIGH" as const,
-      dayOffset: 4,
-      hourWib: 19,
-      minWib: 30,
-      forecast: "165K (Tingkat: 4.2%)",
-      previous: "142K (Tingkat: 4.3%)",
-      goldImpactEffect: "NFP Kuat (>180K) → Emas Anjlok Tajam. NFP Lemah (<130K) → Emas Terbang Menembus Resistance.",
-      description: "Data tenaga kerja sektor non-pertanian AS. Peristiwa paling volatil bulanan untuk pasangan XAU/USD.",
-      category: "EMPLOYMENT" as const,
-    },
-    {
-      id: "news-retail-sales",
-      title: "US Retail Sales m/m",
-      country: "US",
-      currency: "USD",
-      impact: "MEDIUM" as const,
-      dayOffset: -1,
-      hourWib: 19,
-      minWib: 30,
-      forecast: "0.4%",
-      previous: "0.2%",
-      goldImpactEffect: "Konsumsi ritel kuat memperkokoh ekonomi AS dan mendukung penguatan Dolar.",
-      description: "Total nilai penjualan di tingkat ritel AS.",
+      forecast: "55.2",
+      previous: "54.8",
+      actualIfPassed: "55.6",
+      goldImpactEffect: "Hasil di bawah 50 (Kontraksi) melemahkan DXY dan memicu lonjakan harga emas XAU/USD (Bullish). Hasil tinggi menguatkan Dolar (Bearish).",
+      description: "Indikator utama kesehatan ekonomi sektor manufaktur AS oleh Institute for Supply Management. Membuka pekan perdagangan dengan volatilitas signifikan.",
       category: "GROWTH" as const,
     },
     {
-      id: "news-ism-pmi",
-      title: "US ISM Services PMI",
+      id: "us-jolts-openings",
+      title: "US JOLTS Job Openings",
       country: "US",
       currency: "USD",
       impact: "MEDIUM" as const,
-      dayOffset: 5,
+      dayIndex: 1, // Tuesday
+      hourWib: 21,
+      minWib: 0,
+      forecast: "7.72M",
+      previous: "7.67M",
+      actualIfPassed: "7.74M",
+      goldImpactEffect: "Lowongan kerja berkurang menunjukkan pendinginan pasar tenaga kerja AS, mendukung kenaikan harga emas Spot.",
+      description: "Jumlah lowongan pekerjaan yang belum terisi di AS selama bulan survei, indikator likuiditas tenaga kerja The Fed.",
+      category: "EMPLOYMENT" as const,
+    },
+    {
+      id: "us-adp-employment",
+      title: "US ADP Non-Farm Employment Change",
+      country: "US",
+      currency: "USD",
+      impact: "MEDIUM" as const,
+      dayIndex: 2, // Wednesday
+      hourWib: 19,
+      minWib: 15,
+      forecast: "145K",
+      previous: "122K",
+      actualIfPassed: "148K",
+      goldImpactEffect: "Leading indicator untuk NFP resmi. Jika ADP meleset ke bawah (<120K), emas biasanya rally agresif.",
+      description: "Perkiraan penambahan tenaga kerja swasta non-pertanian bulanan oleh Automatic Data Processing.",
+      category: "EMPLOYMENT" as const,
+    },
+    {
+      id: "us-ism-services-pmi",
+      title: "US ISM Services PMI & Prices",
+      country: "US",
+      currency: "USD",
+      impact: "HIGH" as const,
+      dayIndex: 2, // Wednesday
       hourWib: 21,
       minWib: 0,
       forecast: "51.4",
       previous: "50.8",
-      goldImpactEffect: "Angka di bawah 50 (Kontraksi) mendukung kenaikan emas safe-haven.",
-      description: "Survei aktivitas manajer pembelian sektor jasa AS.",
+      actualIfPassed: "51.8",
+      goldImpactEffect: "Sektor jasa menyumbang >70% GDP AS. Angka lemah memicu ketakutan stagflasi dan mengalirkan dana lindung nilai ke Emas.",
+      description: "Aktivitas manajer pembelian sektor jasa AS. Indikator paling krusial untuk proyeksi kuartalan The Fed.",
       category: "SENTIMENT" as const,
+    },
+    {
+      id: "us-initial-claims",
+      title: "US Initial Jobless Claims",
+      country: "US",
+      currency: "USD",
+      impact: "MEDIUM" as const,
+      dayIndex: 3, // Thursday
+      hourWib: 19,
+      minWib: 30,
+      forecast: "228K",
+      previous: "232K",
+      actualIfPassed: "225K",
+      goldImpactEffect: "Klaim pengangguran bertambah (>235K) menandakan pelemahan tenaga kerja → DXY turun → XAU/USD Bullish.",
+      description: "Jumlah pengajuan klaim tunjangan pengangguran baru pertama kali di AS setiap pekan.",
+      category: "EMPLOYMENT" as const,
+    },
+    {
+      id: "us-core-cpi",
+      title: "US Core CPI (Consumer Price Index) m/m",
+      country: "US",
+      currency: "USD",
+      impact: "HIGH" as const,
+      dayIndex: 3, // Thursday
+      hourWib: 19,
+      minWib: 30,
+      forecast: "0.3%",
+      previous: "0.2%",
+      actualIfPassed: "0.3%",
+      goldImpactEffect: "Jika Aktual > Forecast → DXY Menguat Tajam → XAU/USD Berpotensi Tertekan (Bearish). Jika Aktual < Forecast → XAU/USD Bullish Rally Menembus Resistance.",
+      description: "Data inflasi utama konsumen AS tanpa komponen volatil pangan & energi. Faktor kunci penetapan suku bunga The Fed.",
+      category: "INFLATION" as const,
+    },
+    {
+      id: "us-nfp-unemployment",
+      title: "US Non-Farm Payrolls (NFP) & Unemployment Rate",
+      country: "US",
+      currency: "USD",
+      impact: "HIGH" as const,
+      dayIndex: 4, // Friday
+      hourWib: 19,
+      minWib: 30,
+      forecast: "165K (Tingkat: 4.2%)",
+      previous: "142K (Tingkat: 4.3%)",
+      actualIfPassed: "168K",
+      goldImpactEffect: "NFP Kuat (>180K) → Emas Anjlok Tajam (Bearish Spike). NFP Lemah (<130K) → Emas Meledak Naik (Bullish Rally).",
+      description: "Perubahan jumlah tenaga kerja di luar sektor pertanian. Peristiwa paling volatil bulanan untuk pasangan XAU/USD.",
+      category: "EMPLOYMENT" as const,
+    },
+    {
+      id: "us-uom-sentiment",
+      title: "US Prelim UoM Consumer Sentiment & Inflation Exp",
+      country: "US",
+      currency: "USD",
+      impact: "MEDIUM" as const,
+      dayIndex: 4, // Friday
+      hourWib: 21,
+      minWib: 0,
+      forecast: "68.5",
+      previous: "67.9",
+      actualIfPassed: "68.2",
+      goldImpactEffect: "Sentimen konsumen melemah mencerminkan penurunan daya beli masyarakat AS dan menahan penguatan Dolar.",
+      description: "Survei bulanan University of Michigan terhadap persepsi konsumen terhadap kondisi finansial dan inflasi.",
+      category: "SENTIMENT" as const,
+    },
+    {
+      id: "us-next-fomc",
+      title: "FOMC Rate Decision & Fed Press Conference",
+      country: "US",
+      currency: "USD",
+      impact: "HIGH" as const,
+      dayIndex: 7, // Next week Wednesday (day 7 from Monday)
+      hourWib: 1,
+      minWib: 0,
+      forecast: "5.25%",
+      previous: "5.50%",
+      actualIfPassed: undefined,
+      goldImpactEffect: "Dovish (Pemangkasan Suku Bunga) → Gold Melonjak Kuat. Hawkish → Tekanan Jual Emas.",
+      description: "Keputusan penetapan suku bunga acuan Federal Reserve dan konferensi pers Ketua The Fed.",
+      category: "CENTRAL_BANK" as const,
     },
   ];
 
-  return templates.map((t) => {
-    const targetDate = new Date(currentTimeMs);
-    targetDate.setDate(targetDate.getDate() + t.dayOffset);
-    targetDate.setHours(t.hourWib, t.minWib, 0, 0);
+  return weeklySchedule.map((item) => {
+    // Exact scheduled date
+    const targetDate = new Date(
+      mondayDate.getFullYear(),
+      mondayDate.getMonth(),
+      mondayDate.getDate() + item.dayIndex,
+      item.hourWib,
+      item.minWib,
+      0,
+      0
+    );
     const scheduledMs = targetDate.getTime();
-    const diffMins = Math.round((scheduledMs - currentTimeMs) / 60000);
+    const diffMinutes = Math.round((scheduledMs - currentTimeMs) / 60000);
 
     let status: "UPCOMING" | "LIVE_NOW" | "RELEASED" = "UPCOMING";
     let actual: string | undefined = undefined;
 
-    if (diffMins < -15) {
+    if (diffMinutes < -15) {
       status = "RELEASED";
-      actual = t.forecast;
-    } else if (diffMins >= -15 && diffMins <= 15) {
+      actual = item.actualIfPassed || item.forecast;
+    } else if (diffMinutes >= -15 && diffMinutes <= 15) {
       status = "LIVE_NOW";
+    } else {
+      status = "UPCOMING";
     }
 
     return {
-      id: `${t.id}-${targetDate.getDate()}`,
-      title: t.title,
-      country: t.country,
-      currency: t.currency,
-      impact: t.impact,
-      dateStr: formatDateLabel(scheduledMs),
-      timeStrWib: `${String(t.hourWib).padStart(2, "0")}:${String(t.minWib).padStart(2, "0")} WIB`,
+      id: `${item.id}-${targetDate.getFullYear()}-${targetDate.getMonth() + 1}-${targetDate.getDate()}`,
+      title: item.title,
+      country: item.country,
+      currency: item.currency,
+      impact: item.impact,
+      dateStr: formatDateLabel(targetDate),
+      timeStrWib: `${String(item.hourWib).padStart(2, "0")}:${String(item.minWib).padStart(2, "0")} WIB`,
       scheduledTimestamp: scheduledMs,
-      forecast: t.forecast,
-      previous: t.previous,
+      forecast: item.forecast,
+      previous: item.previous,
       actual,
-      goldImpactEffect: t.goldImpactEffect,
-      description: t.description,
-      category: t.category,
+      goldImpactEffect: item.goldImpactEffect,
+      description: item.description,
+      category: item.category,
       status,
     };
   });

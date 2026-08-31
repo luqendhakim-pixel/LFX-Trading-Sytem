@@ -155,6 +155,8 @@ export interface AISignal {
   confluences?: ConfluenceCheckItem[];
   marketRegime?: "STRONG_TREND" | "HEALTHY_TREND" | "CONSOLIDATION_CHOP" | "LIQUIDITY_HUNT";
   tssData?: TSSAnalysisSummary;
+  createdAt?: number;
+  closedAt?: number;
 }
 
 export interface ExnessAccountConfig {

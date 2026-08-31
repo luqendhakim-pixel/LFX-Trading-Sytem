@@ -167,7 +167,7 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
   return (
     <div
       id="signal-detail-view"
-      className="w-full max-w-lg md:max-w-2xl mx-auto pb-28 pt-2 px-3 sm:px-4 text-slate-100 animate-fadeIn"
+      className="w-full max-w-full lg:max-w-5xl xl:max-w-6xl mx-auto pb-28 pt-2 px-2 sm:px-4 md:px-6 text-slate-100 animate-fadeIn"
     >
       {/* Top Back Navigation (Matching screenshot: < Detail Signal) */}
       <div className="flex items-center justify-between mb-4">

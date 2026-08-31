@@ -224,19 +224,35 @@ class NotificationService {
       icon: options.icon || "/icon-192.png",
       badge: "/icon-192.png",
       tag: options.tag || `gold-signal-${Date.now()}`,
-      vibrate: [200, 100, 200, 100, 300],
+      vibrate: [300, 100, 300, 100, 400],
       silent: false,
       renotify: true,
       requireInteraction: false,
       data: { url: "/" },
+      actions: [
+        { action: "open_signal", title: "📊 Buka Sinyal" },
+        { action: "close", title: "Tutup" },
+      ],
     };
 
-    // 1. Try Service Worker showNotification first (Works when minimized / locked screen on Mobile)
+    // 1. Try Service Worker showNotification first (Works when minimized / locked screen on Mobile Android/iOS)
+    let swSuccess = false;
     try {
       if ("serviceWorker" in navigator) {
+        // Send message to controller
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: "SHOW_NOTIFICATION",
+            title,
+            options: notifOptions,
+          });
+          swSuccess = true;
+        }
+
         const registration = await navigator.serviceWorker.ready;
         if (registration && typeof registration.showNotification === "function") {
           await registration.showNotification(title, notifOptions);
+          swSuccess = true;
           return;
         }
       }
@@ -245,14 +261,16 @@ class NotificationService {
     }
 
     // 2. Fallback to standard Window Notification
-    try {
-      const notif = new Notification(title, notifOptions);
-      notif.onclick = () => {
-        window.focus();
-        notif.close();
-      };
-    } catch (e) {
-      console.warn("Notification trigger error:", e);
+    if (!swSuccess) {
+      try {
+        const notif = new Notification(title, notifOptions);
+        notif.onclick = () => {
+          window.focus();
+          notif.close();
+        };
+      } catch (e) {
+        console.warn("Notification trigger error:", e);
+      }
     }
   }
 
@@ -278,17 +296,7 @@ class NotificationService {
     const sigType = signal.signalType || "BUY";
     const title = `🛡️ PASANG BE (BREAK EVEN): ${sigType} ${sym} (+${runningPips} Pips)`;
     const body = `Harga mencapai $${currentPrice.toFixed(2)} (+${runningPips} pips). Stop Loss otomatis digeser ke Entry ($${Number(signal.entryPrice).toFixed(2)}) untuk mengunci posisi tanpa risiko!`;
-
-    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-      try {
-        new Notification(title, {
-          body,
-          icon: "/favicon.ico",
-          tag: `be-trigger-${signal.id}`,
-          silent: false,
-        });
-      } catch (e) {}
-    }
+    this.sendMobilePush(title, { body, tag: `be-trigger-${signal.id}` });
   }
 
   // 3. Target Hit Notification (TP1-4, SL, BE Hit)
@@ -325,16 +333,7 @@ class NotificationService {
       body = `Harga kembali ke titik Entry $${triggerPrice.toFixed(2)}. Posisi ditutup impas tanpa risiko kerugian.`;
     }
 
-    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-      try {
-        new Notification(title, {
-          body,
-          icon: "/favicon.ico",
-          tag: `hit-${signal.id}-${targetType}`,
-          silent: false,
-        });
-      } catch (e) {}
-    }
+    this.sendMobilePush(title, { body, tag: `hit-${signal.id}-${targetType}` });
   }
 }
 

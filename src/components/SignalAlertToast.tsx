@@ -76,7 +76,7 @@ export const SignalAlertToast: React.FC<SignalAlertToastProps> = ({
             key={id}
             id={`signal-toast-${id}`}
             onClick={() => onSelectSignal?.(signal)}
-            className={`rounded-2xl border shadow-2xl backdrop-blur-xl p-4 transition-all duration-300 transform animate-in slide-in-from-top-4 relative overflow-hidden cursor-pointer ${
+            className={`rounded-2xl border shadow-2xl p-4 transition-all duration-300 transform animate-in slide-in-from-top-4 relative overflow-hidden cursor-pointer ${
               isBeTriggered
                 ? "bg-slate-950/95 border-cyan-400 shadow-cyan-950/60 ring-1 ring-cyan-400/50"
                 : isTpHit

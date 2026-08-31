@@ -80,6 +80,31 @@ self.addEventListener('push', (event) => {
   );
 });
 
+// Background Message Handler for direct app-to-service-worker triggers
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = event.data;
+    const notifOptions = {
+      body: options?.body || 'Pemberitahuan Sinyal Emas Baru',
+      icon: options?.icon || '/icon-192.png',
+      badge: options?.badge || '/icon-192.png',
+      tag: options?.tag || `lfx-msg-${Date.now()}`,
+      vibrate: options?.vibrate || [300, 100, 300, 100, 400],
+      renotify: true,
+      requireInteraction: false,
+      data: options?.data || { url: '/' },
+      actions: [
+        { action: 'open_signal', title: '📈 Buka Sinyal' },
+        { action: 'close', title: 'Tutup' }
+      ]
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(title || '🚨 SINYAL BARU LFX TRADING', notifOptions)
+    );
+  }
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'close') return;

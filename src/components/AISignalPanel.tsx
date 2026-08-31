@@ -60,15 +60,8 @@ export const AISignalPanel: React.FC<AISignalPanelProps> = ({
   return (
     <div
       id="ai-signal-panel"
-      className="bg-[#0f1420] border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden h-full"
+      className="bg-[#0f1420] border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-xl relative h-full"
     >
-      {/* Background Accent Glow */}
-      <div
-        className={`absolute -top-16 -right-16 w-36 h-36 rounded-full blur-3xl opacity-20 pointer-events-none ${
-          isBuy ? "bg-emerald-500" : isSell ? "bg-rose-500" : "bg-amber-500"
-        }`}
-      ></div>
-
       <div className="space-y-3.5">
         {/* Header with AI Badge & Scan Button */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800/80">

@@ -145,16 +145,16 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
   return (
     <div
       id="signals-list-view"
-      className="w-full max-w-lg md:max-w-3xl mx-auto pb-28 pt-2 px-3 sm:px-4 text-slate-100 space-y-4 animate-fadeIn"
+      className="w-full max-w-full lg:max-w-7xl xl:max-w-[1600px] mx-auto pb-28 pt-2 px-2 sm:px-4 md:px-6 text-slate-100 space-y-4 sm:space-y-5 animate-fadeIn"
     >
       {/* Top Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
             <Sliders className="w-5 h-5 text-cyan-400" />
             <span>Signal Real-time XAU/USD</span>
           </h2>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
             Hanya 1 posisi aktif berjalan. Sinyal lama otomatis masuk riwayat (Closed).
           </p>
         </div>
@@ -215,7 +215,6 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
             className="p-4 rounded-2xl bg-gradient-to-br from-[#0c152e] via-[#091024] to-[#0a1226] border-2 border-emerald-500/40 shadow-xl shadow-emerald-950/20 hover:border-emerald-400/70 transition cursor-pointer relative overflow-hidden group"
           >
             {/* Ambient Background Accent */}
-            <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
 
             <div className="flex items-start justify-between relative z-10">
               <div className="flex items-center gap-2.5">
@@ -336,10 +335,10 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
         </div>
       </div>
 
-      {/* Signals List */}
-      <div className="space-y-2 pt-1">
+      {/* Signals List Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
         {filteredSignals.length === 0 ? (
-          <div className="p-8 text-center bg-[#0b1021] border border-slate-800 rounded-3xl text-slate-400 text-xs">
+          <div className="col-span-full p-8 text-center bg-[#0b1021] border border-slate-800 rounded-3xl text-slate-400 text-xs">
             Tidak ada sinyal dengan filter ini.
           </div>
         ) : (

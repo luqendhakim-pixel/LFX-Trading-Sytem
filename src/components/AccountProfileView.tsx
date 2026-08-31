@@ -128,7 +128,7 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
       className="w-full max-w-lg md:max-w-3xl mx-auto pb-28 pt-2 px-3 sm:px-4 text-slate-100 space-y-4 animate-fadeIn"
     >
       {/* Brand Header Banner */}
-      <div className="flex items-center justify-between py-2.5 px-3 sm:px-4 rounded-2xl bg-[#060a15]/90 border border-slate-800/80 backdrop-blur-md">
+      <div className="flex items-center justify-between py-2.5 px-3 sm:px-4 rounded-2xl bg-[#060a15] border border-slate-800/80">
         <LfxLogo variant="full" className="h-10 sm:h-11" />
         <span className="text-[11px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-md">
           v6.2 PRO
@@ -220,10 +220,8 @@ export const AccountProfileView: React.FC<AccountProfileViewProps> = ({
       {/* 🚀 BAGIKAN & INSTALL APLIKASI (SHARE INSTALL LINK) */}
       <div
         id="share-app-install-card"
-        className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-[#0c1830] via-[#091124] to-[#060b17] border border-cyan-500/40 shadow-xl space-y-3.5 relative overflow-hidden"
+        className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-[#0c1830] via-[#091124] to-[#060b17] border border-cyan-500/40 shadow-xl space-y-3.5 relative"
       >
-        <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none"></div>
-
         {/* Card Header */}
         <div className="flex items-center justify-between pb-2.5 border-b border-slate-800/80 relative z-10">
           <div className="flex items-center gap-2.5">

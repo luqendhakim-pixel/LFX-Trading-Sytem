@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import {
@@ -85,7 +86,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // ==========================================
-// 🔐 AUTH & SUBSCRIPTION IN-MEMORY STORE
+// 🔐 AUTH & SUBSCRIPTION PERSISTENT STORE
 // ==========================================
 interface UserRecord {
   id: string;
@@ -128,38 +129,138 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const ADMIN_EMAIL = "luqendhakim@gmail.com";
 const ADMIN_PHONE = "08123456789";
 
-// Seed default Admin
-const nowTime = Date.now();
-usersDb.set(ADMIN_EMAIL, {
-  id: "USR-ADMIN-01",
-  name: "LuqendIbnuHakim",
-  identifier: ADMIN_EMAIL,
-  password: "admin123", // Admin default password
-  authMethod: "EMAIL",
-  role: "ADMIN",
-  registeredAt: nowTime - 5 * 24 * 60 * 60 * 1000,
-  trialEndsAt: nowTime + 2 * 24 * 60 * 60 * 1000,
-  subscriptionEndsAt: nowTime + 365 * 24 * 60 * 60 * 1000,
-  status: "ADMIN",
-});
+// File Persistence Directory and Helpers
+const DATA_DIR = path.join(process.cwd(), "data");
+const USERS_FILE = path.join(DATA_DIR, "lfx_users.json");
+const LICENSES_FILE = path.join(DATA_DIR, "lfx_licenses.json");
 
-// Seed sample VIP License Codes
-licensesDb.set("LFX-150VIP", {
-  code: "LFX-150VIP",
-  createdAt: nowTime,
-  durationDays: 30,
-  priceIdr: 150000,
-  isUsed: false,
-  createdBy: "ADMIN",
-});
-licensesDb.set("LFX-889900", {
-  code: "LFX-889900",
-  createdAt: nowTime,
-  durationDays: 30,
-  priceIdr: 150000,
-  isUsed: false,
-  createdBy: "ADMIN",
-});
+function ensureDataDir(): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch (e) {
+    console.warn("[Storage] Warning creating data directory:", e);
+  }
+}
+
+function saveUsersToDisk(): void {
+  try {
+    ensureDataDir();
+    const array = Array.from(usersDb.values());
+    fs.writeFileSync(USERS_FILE, JSON.stringify(array, null, 2), "utf-8");
+  } catch (e) {
+    console.error("[Storage] Error saving users to disk:", e);
+  }
+}
+
+function loadUsersFromDisk(): void {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(USERS_FILE)) {
+      const raw = fs.readFileSync(USERS_FILE, "utf-8");
+      const list: UserRecord[] = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        list.forEach((u) => {
+          if (u && u.identifier) {
+            usersDb.set(u.identifier.toLowerCase().trim(), u);
+          }
+        });
+        console.log(`[Storage] Successfully loaded ${usersDb.size} registered users from disk.`);
+      }
+    }
+  } catch (e) {
+    console.warn("[Storage] Warning loading users from disk:", e);
+  }
+
+  // Always ensure Master Admin account exists
+  const now = Date.now();
+  if (!usersDb.has(ADMIN_EMAIL)) {
+    usersDb.set(ADMIN_EMAIL, {
+      id: "USR-ADMIN-01",
+      name: "LuqendIbnuHakim",
+      identifier: ADMIN_EMAIL,
+      password: "admin123",
+      authMethod: "EMAIL",
+      role: "ADMIN",
+      registeredAt: now - 5 * 24 * 60 * 60 * 1000,
+      trialEndsAt: now + 2 * 24 * 60 * 60 * 1000,
+      subscriptionEndsAt: now + 365 * 24 * 60 * 60 * 1000,
+      status: "ADMIN",
+    });
+  }
+
+  if (!usersDb.has(ADMIN_PHONE)) {
+    usersDb.set(ADMIN_PHONE, {
+      id: "USR-ADMIN-02",
+      name: "LuqendIbnuHakim",
+      identifier: ADMIN_PHONE,
+      password: "admin123",
+      authMethod: "WHATSAPP",
+      role: "ADMIN",
+      registeredAt: now - 5 * 24 * 60 * 60 * 1000,
+      trialEndsAt: now + 2 * 24 * 60 * 60 * 1000,
+      subscriptionEndsAt: now + 365 * 24 * 60 * 60 * 1000,
+      status: "ADMIN",
+    });
+  }
+
+  saveUsersToDisk();
+}
+
+function saveLicensesToDisk(): void {
+  try {
+    ensureDataDir();
+    const array = Array.from(licensesDb.values());
+    fs.writeFileSync(LICENSES_FILE, JSON.stringify(array, null, 2), "utf-8");
+  } catch (e) {
+    console.error("[Storage] Error saving licenses to disk:", e);
+  }
+}
+
+function loadLicensesFromDisk(): void {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(LICENSES_FILE)) {
+      const raw = fs.readFileSync(LICENSES_FILE, "utf-8");
+      const list: LicenseRecord[] = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        list.forEach((lic) => {
+          if (lic && lic.code) {
+            licensesDb.set(lic.code.toUpperCase().trim(), lic);
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("[Storage] Warning loading licenses from disk:", e);
+  }
+
+  const nowTime = Date.now();
+  if (licensesDb.size === 0) {
+    licensesDb.set("LFX-150VIP", {
+      code: "LFX-150VIP",
+      createdAt: nowTime,
+      durationDays: 30,
+      priceIdr: 150000,
+      isUsed: false,
+      createdBy: "ADMIN",
+    });
+    licensesDb.set("LFX-889900", {
+      code: "LFX-889900",
+      createdAt: nowTime,
+      durationDays: 30,
+      priceIdr: 150000,
+      isUsed: false,
+      createdBy: "ADMIN",
+    });
+  }
+  saveLicensesToDisk();
+}
+
+// Initial Boot Disk Load
+loadUsersFromDisk();
+loadLicensesFromDisk();
 
 // 1. Send OTP via Email or WhatsApp
 app.post("/api/auth/send-otp", (req, res) => {
@@ -213,6 +314,12 @@ app.post("/api/auth/login-password", (req, res) => {
         message: "Password salah! Silakan periksa kembali kata sandi Anda.",
       });
     }
+    // Save updated password if provided
+    if (password && !user.password) {
+      user.password = String(password).trim();
+      usersDb.set(cleanEmail, user);
+      saveUsersToDisk();
+    }
   } else {
     // New user registration: save their custom password and give 7-day trial
     user = {
@@ -228,6 +335,7 @@ app.post("/api/auth/login-password", (req, res) => {
       status: isAdmin ? "ADMIN" : "TRIAL_ACTIVE",
     };
     usersDb.set(cleanEmail, user);
+    saveUsersToDisk();
   }
 
   // Calculate dynamic days remaining
@@ -301,6 +409,7 @@ app.post("/api/auth/verify-otp", (req, res) => {
       status: isAdmin ? "ADMIN" : "TRIAL_ACTIVE",
     };
     usersDb.set(cleanIdentifier, user);
+    saveUsersToDisk();
   }
 
   // Calculate dynamic days remaining
@@ -365,6 +474,8 @@ app.post("/api/auth/activate-license", (req, res) => {
     license.isUsed = true;
     license.usedBy = cleanIdentifier;
     license.usedAt = Date.now();
+    licensesDb.set(cleanCode, license);
+    saveLicensesToDisk();
   }
 
   let user = usersDb.get(cleanIdentifier);
@@ -387,7 +498,9 @@ app.post("/api/auth/activate-license", (req, res) => {
     const baseTime = user.subscriptionEndsAt && user.subscriptionEndsAt > now ? user.subscriptionEndsAt : now;
     user.subscriptionEndsAt = baseTime + THIRTY_DAYS_MS;
     user.status = "SUBSCRIBED";
+    usersDb.set(cleanIdentifier, user);
   }
+  saveUsersToDisk();
 
   const daysRemaining = Math.max(1, Math.ceil((user.subscriptionEndsAt - now) / (24 * 60 * 60 * 1000)));
 
@@ -404,6 +517,9 @@ app.post("/api/auth/activate-license", (req, res) => {
 
 // 4. Admin: Get all members list
 app.get("/api/admin/members", (req, res) => {
+  // Ensure we serve fresh from disk
+  loadUsersFromDisk();
+
   const members = Array.from(usersDb.values()).map((u) => {
     const now = Date.now();
     let daysRemaining = 0;
@@ -448,6 +564,7 @@ app.post("/api/admin/generate-code", (req, res) => {
   };
 
   licensesDb.set(code, licenseRecord);
+  saveLicensesToDisk();
 
   res.json({
     success: true,
@@ -487,12 +604,41 @@ app.post("/api/admin/activate-user", (req, res) => {
   }
 
   usersDb.set(cleanIdentifier, user);
+  saveUsersToDisk();
 
   res.json({
     success: true,
     message: `User ${cleanIdentifier} berhasil diaktifkan selama ${days} Hari!`,
     user,
   });
+});
+
+// 7. Admin / Client: Sync registered members
+app.post("/api/admin/sync-member", (req, res) => {
+  const { user } = req.body;
+  if (!user || !user.identifier) {
+    return res.status(400).json({ success: false, message: "Invalid user data" });
+  }
+
+  const cleanId = String(user.identifier).trim().toLowerCase();
+  const existing = usersDb.get(cleanId);
+  const updatedUser: UserRecord = {
+    id: user.id || existing?.id || `USR-${Date.now().toString().slice(-6)}`,
+    name: user.name || existing?.name || (cleanId.includes("@") ? cleanId.split("@")[0] : "Trader"),
+    identifier: cleanId,
+    password: user.password || existing?.password || "123456",
+    authMethod: user.authMethod || existing?.authMethod || "EMAIL",
+    role: cleanId === ADMIN_EMAIL || cleanId === ADMIN_PHONE ? "ADMIN" : user.role || existing?.role || "MEMBER",
+    registeredAt: user.registeredAt || existing?.registeredAt || Date.now(),
+    trialEndsAt: user.trialEndsAt || existing?.trialEndsAt || Date.now() + SEVEN_DAYS_MS,
+    subscriptionEndsAt: user.subscriptionEndsAt || existing?.subscriptionEndsAt || null,
+    status: user.status || existing?.status || "TRIAL_ACTIVE",
+  };
+
+  usersDb.set(cleanId, updatedUser);
+  saveUsersToDisk();
+
+  res.json({ success: true, message: `Member ${cleanId} disinkronkan ke server database`, user: updatedUser });
 });
 
 // In-memory live market state for XAU/USD (Gold)
@@ -659,132 +805,197 @@ const CALENDAR_CACHE_TTL_MS = 60 * 1000; // 1 minute cache
 
 function generateDynamicInstitutionalCalendar(): EconomicCalendarItem[] {
   const now = new Date();
-  const baseTime = now.getTime();
-  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  const baseTime愚 = now.getTime();
 
   const dayNamesId = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
   const monthNamesId = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+    "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
   ];
 
   // Helper to format date label relative to today in WIB
   const formatDateLabel = (targetDate: Date): string => {
     const todayStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
     const targetStr = `${targetDate.getFullYear()}-${targetDate.getMonth()}-${targetDate.getDate()}`;
-    const diffDays = Math.round((new Date(targetStr).getTime() - new Date(todayStr).getTime()) / (24 * 3600 * 1000));
+    const diffDays自由 = Math.round((targetDate.getTime() - new Date(todayStr).getTime()) / (24 * 3600 * 1000));
 
-    if (diffDays === 0) return "Hari Ini";
-    if (diffDays === 1) return "Besok";
-    if (diffDays === 2) return "Lusa";
-    if (diffDays === -1) return "Kemarin";
+    if (diffDays自由 === 0) return "Hari Ini";
+    if (diffDays自由 === 1) return "Besok";
+    if (diffDays自由 === 2) return "Lusa";
+    if (diffDays自由 === -1) return "Kemarin";
     return `${dayNamesId[targetDate.getDay()]}, ${targetDate.getDate()} ${monthNamesId[targetDate.getMonth()]}`;
   };
 
-  // Define weekly macro milestones
-  const weeklyTemplates = [
+  const currentDayOfWeek = now.getDay();
+  const distanceToMonday = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+  const mondayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + distanceToMonday);
+
+  const weeklySchedule = [
     {
-      title: "US Core CPI (Consumer Price Index) m/m",
-      category: "INFLATION" as const,
+      id: "us-ism-mfg-pmi",
+      title: "US ISM Manufacturing PMI",
+      country: "US",
+      currency: "USD",
       impact: "HIGH" as const,
-      dayOffset: 0,
-      hourWib: 19,
-      minWib: 30,
-      forecast: "0.3%",
-      previous: "0.2%",
-      goldImpactEffect: "Jika Aktual > Forecast → DXY Menguat Tajam → XAU/USD Berpotensi Tertekan (Bearish). Jika Aktual < Forecast → Emas Rally Kuat.",
-      description: "Ukuran utama inflasi konsumen AS tanpa komponen makanan & energi volatil. Sangat menentukan suku bunga The Fed.",
-    },
-    {
-      title: "US Core PPI (Producer Price Index) m/m",
-      category: "INFLATION" as const,
-      impact: "HIGH" as const,
-      dayOffset: 1,
-      hourWib: 19,
-      minWib: 30,
-      forecast: "0.2%",
-      previous: "0.1%",
-      goldImpactEffect: "Indikator tekanan harga grosir produsen. Jika lebih tinggi dari ekspektasi, yield obligasi US naik & menekan emas.",
-      description: "Perubahan harga barang dan jasa di tingkat produsen AS.",
-    },
-    {
-      title: "FOMC Rate Decision & Fed Statement",
-      category: "CENTRAL_BANK" as const,
-      impact: "HIGH" as const,
-      dayOffset: 2,
-      hourWib: 1,
+      dayIndex: 0,
+      hourWib: 21,
       minWib: 0,
-      forecast: "5.25%",
-      previous: "5.50%",
-      goldImpactEffect: "Pemangkasan Bunga / Dovish → XAU/USD Melonjak Menembus Resistance. Hawkish → Tekanan Jual Emas.",
-      description: "Keputusan penetapan suku bunga acuan Federal Reserve dan proyeksi ekonomi FOMC.",
+      forecast: "55.2",
+      previous: "54.8",
+      actualIfPassed: "55.6",
+      goldImpactEffect: "Hasil di bawah 50 (Kontraksi) melemahkan DXY dan memicu lonjakan harga emas XAU/USD (Bullish).",
+      description: "Indikator utama kesehatan ekonomi sektor manufaktur AS oleh Institute for Supply Management.",
+      category: "GROWTH" as const,
     },
     {
-      title: "Fed Chair Powell Speech & Press Conference",
-      category: "CENTRAL_BANK" as const,
-      impact: "HIGH" as const,
-      dayOffset: 2,
-      hourWib: 1,
-      minWib: 30,
-      forecast: "Dovish Bias",
-      previous: "Neutral",
-      goldImpactEffect: "Pernyataan bernada santai mengenai pemangkasan suku bunga memicu lonjakan pembelian emas institusional.",
-      description: "Konferensi pers langsung Ketua The Fed Jerome Powell membahas arah kebijakan moneter AS.",
-    },
-    {
-      title: "US Initial Jobless Claims",
-      category: "EMPLOYMENT" as const,
+      id: "us-jolts-openings",
+      title: "US JOLTS Job Openings",
+      country: "US",
+      currency: "USD",
       impact: "MEDIUM" as const,
-      dayOffset: 3,
-      hourWib: 19,
-      minWib: 30,
-      forecast: "228K",
-      previous: "232K",
-      goldImpactEffect: "Klaim pengangguran bertambah (>235K) melemahkan USD dan mendorong kenaikan harga emas.",
-      description: "Jumlah klaim tunjangan pengangguran baru pertama kali di AS setiap pekan.",
-    },
-    {
-      title: "US Non-Farm Payrolls (NFP) & Unemployment Rate",
+      dayIndex: 1,
+      hourWib: 21,
+      minWib: 0,
+      forecast: "7.72M",
+      previous: "7.67M",
+      actualIfPassed: "7.74M",
+      goldImpactEffect: "Lowongan kerja berkurang menunjukkan pendinginan pasar tenaga kerja AS, mendukung kenaikan harga emas Spot.",
+      description: "Jumlah lowongan pekerjaan yang belum terisi di AS selama bulan survei.",
       category: "EMPLOYMENT" as const,
-      impact: "HIGH" as const,
-      dayOffset: 4,
-      hourWib: 19,
-      minWib: 30,
-      forecast: "165K (Rate: 4.2%)",
-      previous: "142K (Rate: 4.3%)",
-      goldImpactEffect: "NFP Kuat (>180K) → Emas Terjun Bebas (Dump). NFP Lemah (<130K) → Emas Terbang Impulsif (Pump).",
-      description: "Data pertumbuhan tenaga kerja sektor formal non-pertanian AS. Peristiwa paling volatil bulanan untuk XAU/USD.",
     },
     {
-      title: "US ISM Services PMI",
-      category: "SENTIMENT" as const,
+      id: "us-adp-employment",
+      title: "US ADP Non-Farm Employment Change",
+      country: "US",
+      currency: "USD",
       impact: "MEDIUM" as const,
-      dayOffset: 5,
+      dayIndex: 2,
+      hourWib: 19,
+      minWib: 15,
+      forecast: "145K",
+      previous: "122K",
+      actualIfPassed: "148K",
+      goldImpactEffect: "Jika ADP meleset ke bawah (<120K), emas biasanya rally agresif.",
+      description: "Perkiraan penambahan tenaga kerja swasta non-pertanian bulanan oleh ADP.",
+      category: "EMPLOYMENT" as const,
+    },
+    {
+      id: "us-ism-services-pmi",
+      title: "US ISM Services PMI & Prices",
+      country: "US",
+      currency: "USD",
+      impact: "HIGH" as const,
+      dayIndex: 2,
       hourWib: 21,
       minWib: 0,
       forecast: "51.4",
       previous: "50.8",
-      goldImpactEffect: "Sektor jasa mendominasi 70% ekonomi AS. Angka di bawah 50 memicu kekhawatiran resesi dan melambungkan harga emas.",
-      description: "Survei aktivitas bisnis di sektor jasa AS oleh Institute for Supply Management.",
+      actualIfPassed: "51.8",
+      goldImpactEffect: "Sektor jasa menyumbang >70% GDP AS. Angka lemah memicu kekhawatiran resesi dan mengalirkan dana lindung nilai ke Emas.",
+      description: "Aktivitas manajer pembelian sektor jasa AS oleh ISM.",
+      category: "SENTIMENT" as const,
+    },
+    {
+      id: "us-initial-claims",
+      title: "US Initial Jobless Claims",
+      country: "US",
+      currency: "USD",
+      impact: "MEDIUM" as const,
+      dayIndex: 3,
+      hourWib: 19,
+      minWib: 30,
+      forecast: "228K",
+      previous: "232K",
+      actualIfPassed: "225K",
+      goldImpactEffect: "Klaim pengangguran bertambah (>235K) menandakan pelemahan tenaga kerja → DXY turun → XAU/USD Bullish.",
+      description: "Jumlah pengajuan klaim tunjangan pengangguran baru pertama kali di AS setiap pekan.",
+      category: "EMPLOYMENT" as const,
+    },
+    {
+      id: "us-core-cpi",
+      title: "US Core CPI (Consumer Price Index) m/m",
+      country: "US",
+      currency: "USD",
+      impact: "HIGH" as const,
+      dayIndex: 3,
+      hourWib: 19,
+      minWib: 30,
+      forecast: "0.3%",
+      previous: "0.2%",
+      actualIfPassed: "0.3%",
+      goldImpactEffect: "Jika Aktual > Forecast → DXY Menguat Tajam → XAU/USD Berpotensi Tertekan (Bearish). Jika Aktual < Forecast → XAU/USD Bullish Rally.",
+      description: "Data inflasi utama konsumen AS tanpa komponen volatil pangan & energi.",
+      category: "INFLATION" as const,
+    },
+    {
+      id: "us-nfp-unemployment",
+      title: "US Non-Farm Payrolls (NFP) & Unemployment Rate",
+      country: "US",
+      currency: "USD",
+      impact: "HIGH" as const,
+      dayIndex: 4,
+      hourWib: 19,
+      minWib: 30,
+      forecast: "165K (Tingkat: 4.2%)",
+      previous: "142K (Tingkat: 4.3%)",
+      actualIfPassed: "168K",
+      goldImpactEffect: "NFP Kuat (>180K) → Emas Anjlok Tajam (Bearish Spike). NFP Lemah (<130K) → Emas Meledak Naik (Bullish Rally).",
+      description: "Perubahan jumlah tenaga kerja di luar sektor pertanian.",
+      category: "EMPLOYMENT" as const,
+    },
+    {
+      id: "us-uom-sentiment",
+      title: "US Prelim UoM Consumer Sentiment & Inflation Exp",
+      country: "US",
+      currency: "USD",
+      impact: "MEDIUM" as const,
+      dayIndex: 4,
+      hourWib: 21,
+      minWib: 0,
+      forecast: "68.5",
+      previous: "67.9",
+      actualIfPassed: "68.2",
+      goldImpactEffect: "Sentimen konsumen melemah mencerminkan penurunan daya beli masyarakat AS dan menahan penguatan Dolar.",
+      description: "Survei bulanan University of Michigan terhadap persepsi konsumen terhadap kondisi finansial.",
+      category: "SENTIMENT" as const,
+    },
+    {
+      id: "us-next-fomc",
+      title: "FOMC Rate Decision & Fed Press Conference",
+      country: "US",
+      currency: "USD",
+      impact: "HIGH" as const,
+      dayIndex: 7,
+      hourWib: 1,
+      minWib: 0,
+      forecast: "5.25%",
+      previous: "5.50%",
+      actualIfPassed: undefined,
+      goldImpactEffect: "Dovish (Pemangkasan Suku Bunga) → Gold Melonjak Kuat. Hawkish → Tekanan Jual Emas.",
+      description: "Keputusan penetapan suku bunga acuan Federal Reserve dan konferensi pers Ketua The Fed.",
+      category: "CENTRAL_BANK" as const,
     },
   ];
 
-  return weeklyTemplates.map((item, idx) => {
-    // Calculate targeted calendar timestamp in UTC+7 (WIB)
-    const target = new Date(baseTime);
-    target.setDate(target.getDate() + item.dayOffset);
-    target.setHours(item.hourWib, item.minWib, 0, 0);
-    const scheduledMs = target.getTime();
-    const diffMinutes = Math.round((scheduledMs - baseTime) / 60000);
+  return weeklySchedule.map((item) => {
+    const targetDate = new Date(
+      mondayDate.getFullYear(),
+      mondayDate.getMonth(),
+      mondayDate.getDate() + item.dayIndex,
+      item.hourWib,
+      item.minWib,
+      0,
+      0
+    );
+    const scheduledMs = targetDate.getTime();
+    const diffMinutes = Math.round((scheduledMs - now.getTime()) / 60000);
 
     let status: "UPCOMING" | "LIVE_NOW" | "RELEASED" = "UPCOMING";
     let actual: string | undefined = undefined;
-    let goldSentiment: "BULLISH" | "BEARISH" | "NEUTRAL" | undefined = undefined;
 
     if (diffMinutes < -15) {
       status = "RELEASED";
-      actual = item.forecast;
-      goldSentiment = "NEUTRAL";
+      actual = item.actualIfPassed || item.forecast;
     } else if (diffMinutes >= -15 && diffMinutes <= 15) {
       status = "LIVE_NOW";
     } else {
@@ -792,12 +1003,12 @@ function generateDynamicInstitutionalCalendar(): EconomicCalendarItem[] {
     }
 
     return {
-      id: `macro-event-${idx}-${target.getDate()}`,
+      id: `${item.id}-${targetDate.getFullYear()}-${targetDate.getMonth() + 1}-${targetDate.getDate()}`,
       title: item.title,
-      country: "US",
-      currency: "USD",
+      country: item.country,
+      currency: item.currency,
       impact: item.impact,
-      dateStr: formatDateLabel(target),
+      dateStr: formatDateLabel(targetDate),
       timeStrWib: `${String(item.hourWib).padStart(2, "0")}:${String(item.minWib).padStart(2, "0")} WIB`,
       scheduledTimestamp: scheduledMs,
       forecast: item.forecast,
@@ -807,7 +1018,7 @@ function generateDynamicInstitutionalCalendar(): EconomicCalendarItem[] {
       description: item.description,
       category: item.category,
       status,
-      goldSentiment,
+      goldSentiment: "NEUTRAL" as const,
     };
   });
 }

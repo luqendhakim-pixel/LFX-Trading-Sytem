@@ -50,322 +50,372 @@ import { authService } from "./services/authService";
 import { UserProfile } from "./types";
 import { getTradingSessionName } from "./utils/sessionHelper";
 
-// Realistic historical signals with diverse market zones and accurate outcomes
-const INITIAL_SIGNALS: AISignal[] = [
-  {
-    id: "SIG-XAU-01",
-    symbol: "XAUUSD",
-    signalType: "BUY",
-    entryPrice: 4500.50,
-    stopLoss: 4495.50,
-    takeProfit1: 4505.50,
-    takeProfit2: 4510.50,
-    takeProfit3: 4515.50,
-    takeProfit4: 4520.50,
-    signalStatus: "ACTIVE",
-    status: "ACTIVE",
-    riskRewardRatio: "1 : 2.0",
-    session: getTradingSessionName(),
-    entryZoneLow: 4499.50,
-    entryZoneHigh: 4501.50,
-    formattedTimeWib: "2026-08-28 14:10:15 WIB",
-    timestamp: "14:10",
-    timeframe: "H1",
-    trendDirection: "BULLISH",
-    strength: 92,
-    confidenceScore: 92,
-    primaryReason: "TradingView TSS v6: ALMA Step Filter Bullish Breakout & Demand Order Block",
-    technicalFactors: ["ALMA Step Filter Support", "RSI 58 Golden Zone", "EMA 20/50 Bullish Cross"],
-    pipsSl: 50,
-    pipsTp1: 50,
-    pipsTp2: 100,
-    pipsTp3: 150,
-    pipsTp4: 200,
-    riskAssessment: {
-      recommendedLotSize: 0.1,
-      maxLossUsd: 50.0,
-      riskPercentage: 1,
-      estimatedProfitTp1: 50.0,
-      estimatedProfitTp2: 100.0,
-      estimatedProfitTp3: 150.0,
+const SIGNALS_STORAGE_KEY = "lfx_signals_list_v2";
+
+export function generateInitialSignals(): AISignal[] {
+  const now = Date.now();
+  const formatWib = (ms: number) => {
+    return (
+      new Date(ms).toLocaleString("id-ID", {
+        timeZone: "Asia/Jakarta",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }) + " WIB"
+    );
+  };
+
+  const formatShortTime = (ms: number) => {
+    return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  return [
+    {
+      id: "SIG-XAU-01",
+      symbol: "XAUUSD",
+      signalType: "BUY",
+      entryPrice: 4453.44,
+      stopLoss: 4448.44,
+      takeProfit1: 4458.44,
+      takeProfit2: 4463.44,
+      takeProfit3: 4468.44,
+      takeProfit4: 4473.44,
+      signalStatus: "ACTIVE",
+      status: "ACTIVE",
+      riskRewardRatio: "1 : 2.0",
+      session: getTradingSessionName(),
+      entryZoneLow: 4451.50,
+      entryZoneHigh: 4454.50,
+      createdAt: now - 35 * 60 * 1000,
+      formattedTimeWib: formatWib(now - 35 * 60 * 1000),
+      timestamp: formatShortTime(now - 35 * 60 * 1000),
+      timeframe: "H1",
+      trendDirection: "BULLISH",
+      strength: 92,
+      confidenceScore: 92,
+      primaryReason: "TradingView TSS v6: ALMA Step Filter Bullish Breakout & Demand Order Block",
+      technicalFactors: ["ALMA Step Filter Support", "RSI 58 Golden Zone", "EMA 20/50 Bullish Cross"],
+      pipsSl: 50,
+      pipsTp1: 50,
+      pipsTp2: 100,
+      pipsTp3: 150,
+      pipsTp4: 200,
+      riskAssessment: {
+        recommendedLotSize: 0.1,
+        maxLossUsd: 50.0,
+        riskPercentage: 1,
+        estimatedProfitTp1: 50.0,
+        estimatedProfitTp2: 100.0,
+        estimatedProfitTp3: 150.0,
+      },
     },
-  },
-  {
-    id: "SIG-XAU-02",
-    symbol: "XAUUSD",
-    signalType: "BUY",
-    entryPrice: 4484.50,
-    stopLoss: 4479.50,
-    takeProfit1: 4489.50,
-    takeProfit2: 4494.50,
-    takeProfit3: 4499.50,
-    takeProfit4: 4504.50,
-    signalStatus: "TP3 HIT",
-    status: "COMPLETED",
-    realizedPips: 150,
-    closeResult: "WIN",
-    riskRewardRatio: "1 : 3.0",
-    session: "London",
-    entryZoneLow: 4483.50,
-    entryZoneHigh: 4485.50,
-    formattedTimeWib: "2026-08-28 12:30:00 WIB",
-    timestamp: "12:30",
-    timeframe: "H1",
-    trendDirection: "BULLISH",
-    strength: 90,
-    confidenceScore: 90,
-    primaryReason: "London Breakout Impulsive Leg & TSS Bullish Momentum",
-    technicalFactors: ["SMC Liquidity Grab", "RSI 65", "ALMA Upward Shift"],
-    pipsSl: 50,
-    pipsTp1: 50,
-    pipsTp2: 100,
-    pipsTp3: 150,
-    pipsTp4: 200,
-    riskAssessment: {
-      recommendedLotSize: 0.1,
-      maxLossUsd: 50.0,
-      riskPercentage: 1,
-      estimatedProfitTp1: 50.0,
-      estimatedProfitTp2: 100.0,
-      estimatedProfitTp3: 150.0,
+    {
+      id: "SIG-XAU-02",
+      symbol: "XAUUSD",
+      signalType: "BUY",
+      entryPrice: 4484.50,
+      stopLoss: 4479.50,
+      takeProfit1: 4489.50,
+      takeProfit2: 4494.50,
+      takeProfit3: 4499.50,
+      takeProfit4: 4504.50,
+      signalStatus: "TP3 HIT",
+      status: "COMPLETED",
+      realizedPips: 150,
+      closeResult: "WIN",
+      riskRewardRatio: "1 : 3.0",
+      session: "London",
+      entryZoneLow: 4483.50,
+      entryZoneHigh: 4485.50,
+      createdAt: now - 4 * 3600 * 1000,
+      closedAt: now - 3 * 3600 * 1000,
+      formattedTimeWib: formatWib(now - 4 * 3600 * 1000),
+      timestamp: formatShortTime(now - 4 * 3600 * 1000),
+      timeframe: "H1",
+      trendDirection: "BULLISH",
+      strength: 90,
+      confidenceScore: 90,
+      primaryReason: "London Breakout Impulsive Leg & TSS Bullish Momentum",
+      technicalFactors: ["SMC Liquidity Grab", "RSI 65", "ALMA Upward Shift"],
+      pipsSl: 50,
+      pipsTp1: 50,
+      pipsTp2: 100,
+      pipsTp3: 150,
+      pipsTp4: 200,
+      riskAssessment: {
+        recommendedLotSize: 0.1,
+        maxLossUsd: 50.0,
+        riskPercentage: 1,
+        estimatedProfitTp1: 50.0,
+        estimatedProfitTp2: 100.0,
+        estimatedProfitTp3: 150.0,
+      },
     },
-  },
-  {
-    id: "SIG-XAU-03",
-    symbol: "XAUUSD",
-    signalType: "SELL",
-    entryPrice: 4498.80,
-    stopLoss: 4503.80,
-    takeProfit1: 4493.80,
-    takeProfit2: 4488.80,
-    takeProfit3: 4483.80,
-    takeProfit4: 4478.80,
-    signalStatus: "TP2 HIT",
-    status: "COMPLETED",
-    realizedPips: 100,
-    closeResult: "WIN",
-    riskRewardRatio: "1 : 2.0",
-    session: "Tokyo",
-    entryZoneLow: 4497.50,
-    entryZoneHigh: 4499.50,
-    formattedTimeWib: "2026-08-28 10:15:20 WIB",
-    timestamp: "10:15",
-    timeframe: "H1",
-    trendDirection: "BEARISH",
-    strength: 86,
-    confidenceScore: 86,
-    primaryReason: "Supply Zone Rejection Tokyo High & TSS Step Filter Breakdown",
-    technicalFactors: ["Bearish Order Block", "RSI Bearish Div", "Step Filter Red"],
-    pipsSl: 50,
-    pipsTp1: 50,
-    pipsTp2: 100,
-    pipsTp3: 150,
-    pipsTp4: 200,
-    riskAssessment: {
-      recommendedLotSize: 0.1,
-      maxLossUsd: 50.0,
-      riskPercentage: 1,
-      estimatedProfitTp1: 50.0,
-      estimatedProfitTp2: 100.0,
-      estimatedProfitTp3: 150.0,
+    {
+      id: "SIG-XAU-03",
+      symbol: "XAUUSD",
+      signalType: "SELL",
+      entryPrice: 4498.80,
+      stopLoss: 4503.80,
+      takeProfit1: 4493.80,
+      takeProfit2: 4488.80,
+      takeProfit3: 4483.80,
+      takeProfit4: 4478.80,
+      signalStatus: "TP2 HIT",
+      status: "COMPLETED",
+      realizedPips: 100,
+      closeResult: "WIN",
+      riskRewardRatio: "1 : 2.0",
+      session: "Tokyo",
+      entryZoneLow: 4497.50,
+      entryZoneHigh: 4499.50,
+      createdAt: now - 8 * 3600 * 1000,
+      closedAt: now - 6 * 3600 * 1000,
+      formattedTimeWib: formatWib(now - 8 * 3600 * 1000),
+      timestamp: formatShortTime(now - 8 * 3600 * 1000),
+      timeframe: "H1",
+      trendDirection: "BEARISH",
+      strength: 86,
+      confidenceScore: 86,
+      primaryReason: "Supply Zone Rejection Tokyo High & TSS Step Filter Breakdown",
+      technicalFactors: ["Bearish Order Block", "RSI Bearish Div", "Step Filter Red"],
+      pipsSl: 50,
+      pipsTp1: 50,
+      pipsTp2: 100,
+      pipsTp3: 150,
+      pipsTp4: 200,
+      riskAssessment: {
+        recommendedLotSize: 0.1,
+        maxLossUsd: 50.0,
+        riskPercentage: 1,
+        estimatedProfitTp1: 50.0,
+        estimatedProfitTp2: 100.0,
+        estimatedProfitTp3: 150.0,
+      },
     },
-  },
-  {
-    id: "SIG-XAU-04",
-    symbol: "XAUUSD",
-    signalType: "BUY",
-    entryPrice: 4472.10,
-    stopLoss: 4467.10,
-    takeProfit1: 4477.10,
-    takeProfit2: 4482.10,
-    takeProfit3: 4487.10,
-    takeProfit4: 4492.10,
-    signalStatus: "TP1 HIT",
-    status: "COMPLETED",
-    realizedPips: 50,
-    closeResult: "WIN",
-    riskRewardRatio: "1 : 1.0",
-    session: "Sydney",
-    entryZoneLow: 4470.00,
-    entryZoneHigh: 4473.00,
-    formattedTimeWib: "2026-08-28 05:20:00 WIB",
-    timestamp: "05:20",
-    timeframe: "H1",
-    trendDirection: "BULLISH",
-    strength: 88,
-    confidenceScore: 88,
-    primaryReason: "Weekly Support Rebound & RSI Oversold Reversal",
-    technicalFactors: ["Support Retest", "RSI 34 Bounce", "EMA 50 Support"],
-    pipsSl: 50,
-    pipsTp1: 50,
-    pipsTp2: 100,
-    pipsTp3: 150,
-    pipsTp4: 200,
-    riskAssessment: {
-      recommendedLotSize: 0.1,
-      maxLossUsd: 50.0,
-      riskPercentage: 1,
-      estimatedProfitTp1: 50.0,
-      estimatedProfitTp2: 100.0,
-      estimatedProfitTp3: 150.0,
+    {
+      id: "SIG-XAU-04",
+      symbol: "XAUUSD",
+      signalType: "BUY",
+      entryPrice: 4472.10,
+      stopLoss: 4467.10,
+      takeProfit1: 4477.10,
+      takeProfit2: 4482.10,
+      takeProfit3: 4487.10,
+      takeProfit4: 4492.10,
+      signalStatus: "TP1 HIT",
+      status: "COMPLETED",
+      realizedPips: 50,
+      closeResult: "WIN",
+      riskRewardRatio: "1 : 1.0",
+      session: "Sydney",
+      entryZoneLow: 4470.00,
+      entryZoneHigh: 4473.00,
+      createdAt: now - 28 * 3600 * 1000,
+      closedAt: now - 26 * 3600 * 1000,
+      formattedTimeWib: formatWib(now - 28 * 3600 * 1000),
+      timestamp: formatShortTime(now - 28 * 3600 * 1000),
+      timeframe: "H1",
+      trendDirection: "BULLISH",
+      strength: 88,
+      confidenceScore: 88,
+      primaryReason: "Weekly Support Rebound & RSI Oversold Reversal",
+      technicalFactors: ["Support Retest", "RSI 34 Bounce", "EMA 50 Support"],
+      pipsSl: 50,
+      pipsTp1: 50,
+      pipsTp2: 100,
+      pipsTp3: 150,
+      pipsTp4: 200,
+      riskAssessment: {
+        recommendedLotSize: 0.1,
+        maxLossUsd: 50.0,
+        riskPercentage: 1,
+      },
     },
-  },
-  {
-    id: "SIG-XAU-05",
-    symbol: "XAUUSD",
-    signalType: "SELL",
-    entryPrice: 4465.30,
-    stopLoss: 4470.30,
-    takeProfit1: 4460.30,
-    takeProfit2: 4455.30,
-    takeProfit3: 4450.30,
-    takeProfit4: 4445.30,
-    signalStatus: "TP1 HIT",
-    status: "COMPLETED",
-    realizedPips: 50,
-    closeResult: "WIN",
-    riskRewardRatio: "1 : 1.0",
-    session: "Sydney",
-    entryZoneLow: 4464.00,
-    entryZoneHigh: 4466.50,
-    formattedTimeWib: "2026-08-28 02:40:00 WIB",
-    timestamp: "02:40",
-    timeframe: "H1",
-    trendDirection: "BEARISH",
-    strength: 85,
-    confidenceScore: 85,
-    primaryReason: "Breakdown Asian Low & Bearish Fair Value Gap",
-    technicalFactors: ["FVG Fill", "MACD Histogram Negative", "TSS Step Red"],
-    pipsSl: 50,
-    pipsTp1: 50,
-    pipsTp2: 100,
-    pipsTp3: 150,
-    pipsTp4: 200,
-    riskAssessment: {
-      recommendedLotSize: 0.1,
-      maxLossUsd: 50.0,
-      riskPercentage: 1,
-      estimatedProfitTp1: 50.0,
-      estimatedProfitTp2: 100.0,
-      estimatedProfitTp3: 150.0,
+    {
+      id: "SIG-XAU-05",
+      symbol: "XAUUSD",
+      signalType: "SELL",
+      entryPrice: 4465.30,
+      stopLoss: 4470.30,
+      takeProfit1: 4460.30,
+      takeProfit2: 4455.30,
+      takeProfit3: 4450.30,
+      takeProfit4: 4445.30,
+      signalStatus: "SL HIT",
+      status: "COMPLETED",
+      realizedPips: -50,
+      closeResult: "LOSS",
+      riskRewardRatio: "1 : 1.0",
+      session: "Sydney",
+      entryZoneLow: 4464.00,
+      entryZoneHigh: 4466.50,
+      createdAt: now - 52 * 3600 * 1000,
+      closedAt: now - 50 * 3600 * 1000,
+      formattedTimeWib: formatWib(now - 52 * 3600 * 1000),
+      timestamp: formatShortTime(now - 52 * 3600 * 1000),
+      timeframe: "H1",
+      trendDirection: "BEARISH",
+      strength: 85,
+      confidenceScore: 85,
+      primaryReason: "Breakdown Asian Low & Bearish Fair Value Gap",
+      technicalFactors: ["FVG Fill", "MACD Histogram Negative", "TSS Step Red"],
+      pipsSl: 50,
+      pipsTp1: 50,
+      pipsTp2: 100,
+      pipsTp3: 150,
+      pipsTp4: 200,
+      riskAssessment: {
+        recommendedLotSize: 0.1,
+        maxLossUsd: 50.0,
+        riskPercentage: 1,
+      },
     },
-  },
-  {
-    id: "SIG-XAU-06",
-    symbol: "XAUUSD",
-    signalType: "BUY",
-    entryPrice: 4450.00,
-    stopLoss: 4445.00,
-    takeProfit1: 4455.00,
-    takeProfit2: 4460.00,
-    takeProfit3: 4465.00,
-    takeProfit4: 4470.00,
-    signalStatus: "SL HIT",
-    status: "COMPLETED",
-    realizedPips: -50,
-    closeResult: "LOSS",
-    riskRewardRatio: "1 : 1.0",
-    session: "New York",
-    entryZoneLow: 4449.00,
-    entryZoneHigh: 4451.00,
-    formattedTimeWib: "2026-08-27 20:15:00 WIB",
-    timestamp: "20:15",
-    timeframe: "H1",
-    trendDirection: "BULLISH",
-    strength: 78,
-    confidenceScore: 78,
-    primaryReason: "High Impact News Volatility Spike Triggered SL",
-    technicalFactors: ["News Volatility", "Liquidity Sweep"],
-    pipsSl: 50,
-    pipsTp1: 50,
-    pipsTp2: 100,
-    pipsTp3: 150,
-    pipsTp4: 200,
-    riskAssessment: {
-      recommendedLotSize: 0.1,
-      maxLossUsd: 50.0,
-      riskPercentage: 1,
+    {
+      id: "SIG-XAU-06",
+      symbol: "XAUUSD",
+      signalType: "BUY",
+      entryPrice: 4450.00,
+      stopLoss: 4445.00,
+      takeProfit1: 4455.00,
+      takeProfit2: 4460.00,
+      takeProfit3: 4465.00,
+      takeProfit4: 4470.00,
+      signalStatus: "TP4 HIT",
+      status: "COMPLETED",
+      realizedPips: 200,
+      closeResult: "WIN",
+      riskRewardRatio: "1 : 4.0",
+      session: "New York",
+      entryZoneLow: 4449.00,
+      entryZoneHigh: 4451.00,
+      createdAt: now - 96 * 3600 * 1000,
+      closedAt: now - 90 * 3600 * 1000,
+      formattedTimeWib: formatWib(now - 96 * 3600 * 1000),
+      timestamp: formatShortTime(now - 96 * 3600 * 1000),
+      timeframe: "H1",
+      trendDirection: "BULLISH",
+      strength: 95,
+      confidenceScore: 95,
+      primaryReason: "Strong Institutional Bullish Order Block Full Target Run",
+      technicalFactors: ["Major Support", "ALMA Golden Slope", "High Volume Breakout"],
+      pipsSl: 50,
+      pipsTp1: 50,
+      pipsTp2: 100,
+      pipsTp3: 150,
+      pipsTp4: 200,
+      riskAssessment: {
+        recommendedLotSize: 0.1,
+        maxLossUsd: 50.0,
+        riskPercentage: 1,
+      },
     },
-  },
-  {
-    id: "SIG-XAU-07",
-    symbol: "XAUUSD",
-    signalType: "SELL",
-    entryPrice: 4488.20,
-    stopLoss: 4493.20,
-    takeProfit1: 4483.20,
-    takeProfit2: 4478.20,
-    takeProfit3: 4473.20,
-    takeProfit4: 4468.20,
-    signalStatus: "BREAK EVEN",
-    status: "COMPLETED",
-    realizedPips: 0,
-    closeResult: "BE",
-    riskRewardRatio: "1 : 2.0",
-    session: "London",
-    entryZoneLow: 4487.00,
-    entryZoneHigh: 4489.00,
-    formattedTimeWib: "2026-08-26 15:45:00 WIB",
-    timestamp: "15:45",
-    timeframe: "H1",
-    trendDirection: "BEARISH",
-    strength: 84,
-    confidenceScore: 84,
-    primaryReason: "Price reached +30 pips then reversed to Entry (BE Protected)",
-    technicalFactors: ["BE Lock at +30p", "Session Close Reversal"],
-    pipsSl: 50,
-    pipsTp1: 50,
-    pipsTp2: 100,
-    pipsTp3: 150,
-    pipsTp4: 200,
-    riskAssessment: {
-      recommendedLotSize: 0.1,
-      maxLossUsd: 50.0,
-      riskPercentage: 1,
+    {
+      id: "SIG-XAU-07",
+      symbol: "XAUUSD",
+      signalType: "SELL",
+      entryPrice: 4488.20,
+      stopLoss: 4493.20,
+      takeProfit1: 4483.20,
+      takeProfit2: 4478.20,
+      takeProfit3: 4473.20,
+      takeProfit4: 4468.20,
+      signalStatus: "BREAK EVEN",
+      status: "COMPLETED",
+      realizedPips: 0,
+      closeResult: "BE",
+      riskRewardRatio: "1 : 2.0",
+      session: "London",
+      entryZoneLow: 4487.00,
+      entryZoneHigh: 4489.00,
+      createdAt: now - 10 * 24 * 3600 * 1000,
+      closedAt: now - 10 * 24 * 3600 * 1000,
+      formattedTimeWib: formatWib(now - 10 * 24 * 3600 * 1000),
+      timestamp: formatShortTime(now - 10 * 24 * 3600 * 1000),
+      timeframe: "H1",
+      trendDirection: "BEARISH",
+      strength: 84,
+      confidenceScore: 84,
+      primaryReason: "Price reached +30 pips then reversed to Entry (BE Protected)",
+      technicalFactors: ["BE Lock at +30p", "Session Close Reversal"],
+      pipsSl: 50,
+      pipsTp1: 50,
+      pipsTp2: 100,
+      pipsTp3: 150,
+      pipsTp4: 200,
+      riskAssessment: {
+        recommendedLotSize: 0.1,
+        maxLossUsd: 50.0,
+        riskPercentage: 1,
+      },
     },
-  },
-  {
-    id: "SIG-XAU-08",
-    symbol: "XAUUSD",
-    signalType: "BUY",
-    entryPrice: 4435.50,
-    stopLoss: 4430.50,
-    takeProfit1: 4440.50,
-    takeProfit2: 4445.50,
-    takeProfit3: 4450.50,
-    takeProfit4: 4455.50,
-    signalStatus: "TP4 HIT",
-    status: "COMPLETED",
-    realizedPips: 200,
-    closeResult: "WIN",
-    riskRewardRatio: "1 : 4.0",
-    session: "Tokyo",
-    entryZoneLow: 4434.50,
-    entryZoneHigh: 4436.50,
-    formattedTimeWib: "2026-08-24 09:10:00 WIB",
-    timestamp: "09:10",
-    timeframe: "H1",
-    trendDirection: "BULLISH",
-    strength: 95,
-    confidenceScore: 95,
-    primaryReason: "Strong Institutional Bullish Order Block Full Target Run",
-    technicalFactors: ["Major Support", "ALMA Golden Slope", "High Volume Breakout"],
-    pipsSl: 50,
-    pipsTp1: 50,
-    pipsTp2: 100,
-    pipsTp3: 150,
-    pipsTp4: 200,
-    riskAssessment: {
-      recommendedLotSize: 0.1,
-      maxLossUsd: 50.0,
-      riskPercentage: 1,
-      estimatedProfitTp1: 50.0,
-      estimatedProfitTp2: 100.0,
-      estimatedProfitTp3: 150.0,
-      estimatedProfitTp4: 200.0,
+    {
+      id: "SIG-XAU-08",
+      symbol: "XAUUSD",
+      signalType: "BUY",
+      entryPrice: 4435.50,
+      stopLoss: 4430.50,
+      takeProfit1: 4440.50,
+      takeProfit2: 4445.50,
+      takeProfit3: 4450.50,
+      takeProfit4: 4455.50,
+      signalStatus: "TP3 HIT",
+      status: "COMPLETED",
+      realizedPips: 150,
+      closeResult: "WIN",
+      riskRewardRatio: "1 : 3.0",
+      session: "Tokyo",
+      entryZoneLow: 4434.50,
+      entryZoneHigh: 4436.50,
+      createdAt: now - 18 * 24 * 3600 * 1000,
+      closedAt: now - 18 * 24 * 3600 * 1000,
+      formattedTimeWib: formatWib(now - 18 * 24 * 3600 * 1000),
+      timestamp: formatShortTime(now - 18 * 24 * 3600 * 1000),
+      timeframe: "H1",
+      trendDirection: "BULLISH",
+      strength: 92,
+      confidenceScore: 92,
+      primaryReason: "Monthly Demand Reversal & TSS Trend Continuation",
+      technicalFactors: ["Demand Zone", "ALMA Upward Shift"],
+      pipsSl: 50,
+      pipsTp1: 50,
+      pipsTp2: 100,
+      pipsTp3: 150,
+      pipsTp4: 200,
+      riskAssessment: {
+        recommendedLotSize: 0.1,
+        maxLossUsd: 50.0,
+        riskPercentage: 1,
+      },
     },
-  },
-];
+  ];
+}
+
+const loadStoredSignals = (): AISignal[] => {
+  if (typeof window !== "undefined") {
+    try {
+      const saved = localStorage.getItem(SIGNALS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load stored signals:", e);
+    }
+  }
+  const initial = generateInitialSignals();
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(SIGNALS_STORAGE_KEY, JSON.stringify(initial));
+    } catch (e) {}
+  }
+  return initial;
+};
 
 const INITIAL_POSITIONS: Position[] = [
   {
@@ -576,9 +626,23 @@ export default function App() {
   );
 
   // 3. Signals & Market Data
-  const [signalsList, setSignalsList] = useState<AISignal[]>(INITIAL_SIGNALS);
+  const [signalsList, setSignalsList] = useState<AISignal[]>(loadStoredSignals);
   const [positions, setPositions] = useState<Position[]>(INITIAL_POSITIONS);
-  const [currentSignal, setCurrentSignal] = useState<AISignal | null>(INITIAL_SIGNALS[0]);
+  const [currentSignal, setCurrentSignal] = useState<AISignal | null>(() => {
+    const list = loadStoredSignals();
+    return list.find((s) => s.status === "ACTIVE") || list[0] || null;
+  });
+
+  // Automatically persist signalsList to localStorage whenever updated
+  useEffect(() => {
+    if (signalsList && signalsList.length > 0) {
+      try {
+        localStorage.setItem(SIGNALS_STORAGE_KEY, JSON.stringify(signalsList));
+      } catch (e) {
+        console.warn("Failed to persist signals:", e);
+      }
+    }
+  }, [signalsList]);
 
   const handleSaveJournal = (positionId: string, journal: TradeJournalData) => {
     setPositions((prev) =>
@@ -906,9 +970,9 @@ export default function App() {
             ? "SL HIT"
             : "BREAK EVEN";
 
-        // IMPORTANT: Status CLOSED is ONLY triggered when SL is hit, BE is hit, or when a new signal arrives!
-        // TP1, TP2, TP3, and TP4 remain RUNNING with Break Even protection.
-        const isCompleted = targetHit === "SL" || targetHit === "BE";
+        // IMPORTANT: Status CLOSED is ONLY triggered when SL is hit, BE is hit, or TP4 is hit (full target)!
+        // TP1, TP2, and TP3 remain RUNNING with Break Even protection.
+        const isCompleted = targetHit === "SL" || targetHit === "BE" || targetHit === "TP4";
         const updatedSignal: AISignal = {
           ...currentSig,
           signalStatus: newSignalStatus,
@@ -917,6 +981,7 @@ export default function App() {
           effectiveStopLoss: entry,
           realizedPips: pips,
           closeResult,
+          closedAt: isCompleted ? Date.now() : currentSig.closedAt,
         };
 
         setCurrentSignal(updatedSignal);
@@ -977,7 +1042,9 @@ export default function App() {
 
     // Fetch initial candles from server
     fetchRealCandles(timeframe).then((loadedCandles) => {
-      if (loadedCandles && loadedCandles.length > 0) {
+      // If there is already an active signal in history, do not generate a new signal on reload
+      const hasActive = signalsListRef.current.some((s) => s.status === "ACTIVE");
+      if (!hasActive && loadedCandles && loadedCandles.length > 0) {
         triggerAiScan(timeframe, loadedCandles);
       }
     });
@@ -1017,12 +1084,12 @@ export default function App() {
 
   // Handlers for Modals
   const handleOpenLotSimulation = (sig?: AISignal) => {
-    setActiveSignalForModal(sig || selectedSignal || currentSignal || INITIAL_SIGNALS[0]);
+    setActiveSignalForModal(sig || selectedSignal || currentSignal || signalsList[0]);
     setIsLotSimModalOpen(true);
   };
 
   const handleOpenShareSignal = (sig?: AISignal) => {
-    setActiveSignalForModal(sig || selectedSignal || currentSignal || INITIAL_SIGNALS[0]);
+    setActiveSignalForModal(sig || selectedSignal || currentSignal || signalsList[0]);
     setIsShareModalOpen(true);
   };
 
@@ -1044,7 +1111,7 @@ export default function App() {
       />
 
       {/* Main Responsive Views */}
-      <main className="flex-1 w-full max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto">
+      <main className="flex-1 w-full max-w-full md:max-w-5xl lg:max-w-7xl xl:max-w-[1600px] mx-auto px-2 sm:px-4 md:px-6 lg:px-8 transition-all">
         {/* VIEW 1: BERANDA (Home Dashboard matching screenshot 4) */}
         {activeNavTab === "BERANDA" && (
           <HomeDashboardView
@@ -1175,14 +1242,14 @@ export default function App() {
       <LotSimulationModal
         isOpen={isLotSimModalOpen}
         onClose={() => setIsLotSimModalOpen(false)}
-        signal={activeSignalForModal || currentSignal || INITIAL_SIGNALS[0]}
+        signal={activeSignalForModal || currentSignal || signalsList[0]}
       />
 
       {/* MODAL 2: Bagikan Sinyal */}
       <ShareSignalModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        signal={activeSignalForModal || currentSignal || INITIAL_SIGNALS[0]}
+        signal={activeSignalForModal || currentSignal || signalsList[0]}
       />
 
       {/* MODAL 3: Materi Edukasi */}
@@ -1210,7 +1277,7 @@ export default function App() {
 
       {/* Notification Hub Modal */}
       {isNotifHubOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
           <div className="bg-[#0e1322] border border-slate-800 rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white text-base">Notifikasi & Riwayat Alert</h3>

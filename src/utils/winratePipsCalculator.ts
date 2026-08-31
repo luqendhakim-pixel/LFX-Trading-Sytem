@@ -1,6 +1,6 @@
 import { AISignal } from "../types";
 
-export type PeriodFilter = "DAILY" | "WEEKLY" | "MONTHLY" | "ALL";
+export type PeriodFilter = "DAILY" | "WEEKLY" | "MONTHLY" | "ALL" | "CUSTOM_DATE";
 
 export interface PeriodPipsMetrics {
   period: PeriodFilter;
@@ -19,6 +19,7 @@ export interface PeriodPipsMetrics {
   netPips: number;
   winRatePercent: number;
   signals: AISignal[];
+  customDateKey?: string;
 }
 
 export interface DynamicHistoryWinRate {
@@ -32,11 +33,22 @@ export interface DynamicHistoryWinRate {
  * Parses timestamp or formattedTimeWib from an AISignal into a JavaScript Date object
  */
 export function getSignalDate(signal: AISignal): Date {
+  if (typeof signal.closedAt === "number" && !isNaN(signal.closedAt) && signal.closedAt > 0) {
+    return new Date(signal.closedAt);
+  }
+  if (typeof signal.createdAt === "number" && !isNaN(signal.createdAt) && signal.createdAt > 0) {
+    return new Date(signal.createdAt);
+  }
+
   if (signal.formattedTimeWib) {
     // Expected format: "YYYY-MM-DD HH:mm:ss WIB" or similar
     const cleanStr = signal.formattedTimeWib.replace(" WIB", "").replace(" UTC", "").trim();
-    const d = new Date(cleanStr);
+    // Handle space to ISO format
+    const isoStr = cleanStr.includes("T") ? cleanStr : cleanStr.replace(" ", "T");
+    const d = new Date(isoStr);
     if (!isNaN(d.getTime())) return d;
+    const directD = new Date(cleanStr);
+    if (!isNaN(directD.getTime())) return directD;
   }
 
   // Fallback to timestamp if it looks like ISO or parseable
@@ -206,32 +218,28 @@ export function calculateDynamicHistoryWinRate(signalsList: AISignal[]): Dynamic
 
   // 1. Daily: Last 24 Hours
   const dailySignals = filterByTime(closedSignals, oneDayMs);
-  // Ensure if daily is empty in demo, take the top 3-4 most recent signals
-  const effectiveDailySignals = dailySignals.length > 0 ? dailySignals : closedSignals.slice(0, 3);
 
   // 2. Weekly: Last 7 Days
   const weeklySignals = filterByTime(closedSignals, oneWeekMs);
-  const effectiveWeeklySignals = weeklySignals.length > 0 ? weeklySignals : closedSignals.slice(0, 6);
 
   // 3. Monthly: Last 30 Days
   const monthlySignals = filterByTime(closedSignals, oneMonthMs);
-  const effectiveMonthlySignals = monthlySignals.length > 0 ? monthlySignals : closedSignals;
 
   return {
     daily: computeMetricsForList(
-      effectiveDailySignals,
+      dailySignals,
       "DAILY",
       "Daily (Harian)",
       "24 Jam Terakhir"
     ),
     weekly: computeMetricsForList(
-      effectiveWeeklySignals,
+      weeklySignals,
       "WEEKLY",
       "Weekly (Mingguan)",
       "7 Hari Terakhir"
     ),
     monthly: computeMetricsForList(
-      effectiveMonthlySignals,
+      monthlySignals,
       "MONTHLY",
       "Monthly (Bulanan)",
       "30 Hari Terakhir"
@@ -244,3 +252,164 @@ export function calculateDynamicHistoryWinRate(signalsList: AISignal[]): Dynamic
     ),
   };
 }
+
+/**
+ * Returns date in YYYY-MM-DD format (Asia/Jakarta / Local)
+ */
+export function getSignalDateKey(signal: AISignal): string {
+  const d = getSignalDate(signal);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Converts Date object to YYYY-MM-DD string
+ */
+export function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Formats YYYY-MM-DD to Indonesian readable date (e.g. "31 Agu 2026")
+ */
+export function formatDateKeyToIndo(dateKey: string): string {
+  try {
+    const parts = dateKey.split("-");
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const d = new Date(year, month, day);
+      return d.toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    }
+  } catch (e) {}
+  return dateKey;
+}
+
+/**
+ * Calculates win rate and pips for a specific chosen calendar date (YYYY-MM-DD)
+ */
+export function calculateWinRateForDate(
+  signalsList: AISignal[],
+  targetDateKey: string
+): PeriodPipsMetrics {
+  const closedSignals = signalsList.filter((s) => {
+    const isClosed = s.status === "COMPLETED" || s.status === "EXPIRED" || s.status === "TRIGGERED";
+    const hasResult =
+      s.signalStatus === "TP1 HIT" ||
+      s.signalStatus === "TP2 HIT" ||
+      s.signalStatus === "TP3 HIT" ||
+      s.signalStatus === "TP4 HIT" ||
+      s.signalStatus === "SL HIT" ||
+      s.signalStatus === "BREAK EVEN" ||
+      s.signalStatus === "CLOSED" ||
+      s.closeResult !== undefined;
+    return isClosed || hasResult;
+  });
+
+  const matchingSignals = closedSignals.filter((sig) => {
+    return getSignalDateKey(sig) === targetDateKey;
+  });
+
+  let profitPips = 0;
+  let lossPips = 0;
+  let hitTp1Count = 0;
+  let hitTp2Count = 0;
+  let hitTp3Count = 0;
+  let hitTp4Count = 0;
+  let hitSlCount = 0;
+  let hitBeCount = 0;
+
+  matchingSignals.forEach((sig) => {
+    const { pips, isWin, isLoss, isBe, tpLevel } = extractSignalPips(sig);
+    if (isWin) {
+      profitPips += Math.abs(pips);
+      if (tpLevel === 4) hitTp4Count++;
+      else if (tpLevel === 3) hitTp3Count++;
+      else if (tpLevel === 2) hitTp2Count++;
+      else hitTp1Count++;
+    } else if (isLoss) {
+      lossPips += Math.abs(pips);
+      hitSlCount++;
+    } else if (isBe) {
+      hitBeCount++;
+    }
+  });
+
+  const totalHitTpCount = hitTp1Count + hitTp2Count + hitTp3Count + hitTp4Count;
+  const totalClosedSignals = matchingSignals.length;
+  const netPips = profitPips - lossPips;
+  const totalEvaluated = totalHitTpCount + hitSlCount + hitBeCount;
+  const winRatePercent =
+    totalEvaluated > 0
+      ? Math.round((totalHitTpCount / totalEvaluated) * 100)
+      : totalClosedSignals > 0
+      ? Math.round((totalHitTpCount / totalClosedSignals) * 100)
+      : 0;
+
+  const readableDate = formatDateKeyToIndo(targetDateKey);
+
+  return {
+    period: "CUSTOM_DATE",
+    label: `Harian (${readableDate})`,
+    subLabel: `Kalender: ${targetDateKey}`,
+    totalClosedSignals,
+    totalHitTpCount,
+    hitTp1Count,
+    hitTp2Count,
+    hitTp3Count,
+    hitTp4Count,
+    hitSlCount,
+    hitBeCount,
+    profitPips,
+    lossPips,
+    netPips,
+    winRatePercent,
+    signals: matchingSignals,
+    customDateKey: targetDateKey,
+  };
+}
+
+/**
+ * Returns list of distinct date keys present in signals list with summary
+ */
+export function getAvailableSignalDates(signalsList: AISignal[]): {
+  dateKey: string;
+  label: string;
+  count: number;
+  winRate: number;
+  netPips: number;
+}[] {
+  const map = new Map<string, AISignal[]>();
+
+  signalsList.forEach((sig) => {
+    const key = getSignalDateKey(sig);
+    if (!map.has(key)) {
+      map.set(key, []);
+    }
+    map.get(key)!.push(sig);
+  });
+
+  const dates = Array.from(map.keys()).sort().reverse();
+
+  return dates.map((key) => {
+    const metrics = calculateWinRateForDate(signalsList, key);
+    return {
+      dateKey: key,
+      label: formatDateKeyToIndo(key),
+      count: metrics.totalClosedSignals,
+      winRate: metrics.winRatePercent,
+      netPips: metrics.netPips,
+    };
+  });
+}
+

@@ -207,7 +207,7 @@ Top Disiplin: ${emotionStats.DISCIPLINED?.win || 0}/${emotionStats.DISCIPLINED?.
       />
 
       {/* 0. Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-3xl bg-[#060a16] border border-slate-800 shadow-xl backdrop-blur-md">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-3xl bg-[#060a16] border border-slate-800 shadow-xl">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-md">
             <BookOpen className="w-5 h-5" />

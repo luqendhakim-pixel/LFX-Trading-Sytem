@@ -1,6 +1,7 @@
 import { UserProfile, AuthMethod, UserRole, SubscriptionStatus, LicenseActivationCode } from "../types";
 
 const AUTH_STORAGE_KEY = "lfx_auth_session_v2";
+const MEMBERS_REGISTRY_KEY = "lfx_registered_members_registry_v1";
 const ADMIN_EMAIL = "luqendhakim@gmail.com";
 const ADMIN_PHONE = "08123456789";
 
@@ -91,6 +92,25 @@ class AuthService {
   private saveToStorage(user: UserProfile | null): void {
     if (user) {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+      // Also register in persistent members registry
+      try {
+        const raw = localStorage.getItem(MEMBERS_REGISTRY_KEY);
+        const list: UserProfile[] = raw ? JSON.parse(raw) : [];
+        const index = list.findIndex((m) => m.identifier.toLowerCase() === user.identifier.toLowerCase());
+        if (index >= 0) {
+          list[index] = { ...list[index], ...user };
+        } else {
+          list.push(user);
+        }
+        localStorage.setItem(MEMBERS_REGISTRY_KEY, JSON.stringify(list));
+
+        // Background sync to server
+        fetch("/api/admin/sync-member", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user }),
+        }).catch(() => {});
+      } catch (e) {}
     } else {
       localStorage.removeItem(AUTH_STORAGE_KEY);
     }
@@ -297,16 +317,30 @@ class AuthService {
 
   // Admin Actions
   public async getMembersList(): Promise<UserProfile[]> {
+    let serverMembers: UserProfile[] = [];
     try {
       const res = await fetch("/api/admin/members");
       const data = await res.json();
       if (data.success && Array.isArray(data.members)) {
-        return data.members;
+        serverMembers = data.members;
       }
-    } catch {
-      // fallback mock list
+    } catch (e) {
+      console.warn("Failed fetching members from server:", e);
     }
-    return [
+
+    // Merge with local persistent registry
+    let localMembers: UserProfile[] = [];
+    try {
+      const raw = localStorage.getItem(MEMBERS_REGISTRY_KEY);
+      if (raw) {
+        localMembers = JSON.parse(raw);
+      }
+    } catch (e) {}
+
+    const map = new Map<string, UserProfile>();
+
+    // Seed default sample traders if completely empty
+    const seedDefaults: UserProfile[] = [
       {
         id: "USR-101",
         name: "LuqendIbnuHakim",
@@ -346,20 +380,44 @@ class AuthService {
         daysRemaining: 4,
         status: "TRIAL_ACTIVE",
       },
-      {
-        id: "USR-104",
-        name: "Rizky XAU Pro",
-        identifier: "085712348899",
-        authMethod: "WHATSAPP",
-        role: "MEMBER",
-        registeredAt: Date.now() - 15 * 24 * 60 * 60 * 1000,
-        trialEndsAt: Date.now() - 8 * 24 * 60 * 60 * 1000,
-        subscriptionEndsAt: Date.now() + 22 * 24 * 60 * 60 * 1000,
-        isSubscriptionActive: true,
-        daysRemaining: 22,
-        status: "SUBSCRIBED",
-      },
     ];
+
+    seedDefaults.forEach((m) => map.set(m.identifier.toLowerCase(), m));
+    localMembers.forEach((m) => map.set(m.identifier.toLowerCase(), m));
+    serverMembers.forEach((m) => map.set(m.identifier.toLowerCase(), m));
+
+    // If current logged-in user exists, add them as well
+    if (this.currentUser) {
+      map.set(this.currentUser.identifier.toLowerCase(), this.currentUser);
+    }
+
+    const mergedList = Array.from(map.values()).map((u) => {
+      const calc = calculateUserStatus(u);
+      return {
+        ...u,
+        status: calc.status,
+        isSubscriptionActive: calc.isSubscriptionActive,
+        daysRemaining: calc.daysRemaining,
+      };
+    });
+
+    // Background sync any missing to server
+    mergedList.forEach((u) => {
+      if (!serverMembers.some((sm) => sm.identifier.toLowerCase() === u.identifier.toLowerCase())) {
+        fetch("/api/admin/sync-member", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user: u }),
+        }).catch(() => {});
+      }
+    });
+
+    // Update local registry cache
+    try {
+      localStorage.setItem(MEMBERS_REGISTRY_KEY, JSON.stringify(mergedList));
+    } catch (e) {}
+
+    return mergedList;
   }
 
   public async generateActivationKey(durationDays: number = 30): Promise<LicenseActivationCode> {
