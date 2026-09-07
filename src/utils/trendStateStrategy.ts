@@ -26,14 +26,14 @@ export interface TrendStateConfig {
 }
 
 export const defaultTSSConfig: TrendStateConfig = {
-  sourceType: "Custom",
+  sourceType: "Close",
   length: 5,
   multiplier: 2.0,
   offset: 0.5,
   sigma: 1.0,
-  confirmClose: true,
-  bullColor: "#00F5A0",
-  bearColor: "#FF334B",
+  confirmClose: false, // Sinyal muncul secara real-time tepat saat garis hijau (BUY) atau garis merah (SELL) muncul
+  bullColor: "#00FFAA",
+  bearColor: "#FF0000",
   showGlow: true,
   showRibbon: true,
   showLabels: true,
@@ -399,7 +399,9 @@ export function calculateTrendStateStrategy(
   // Calculate optimal entry, SL, TP targets: Default SL 50 pips (5.000 USD on XAU/USD), TP1 (+50p), TP2 (+100p), TP3 (+150p), TP4 (+200p)
   const isBull = currentTrendEnum === "BULLISH";
   const isBear = currentTrendEnum === "BEARISH";
-  const entryPrice = latestBar.close;
+  // Entry Price anchored precisely to the Step Filter line:
+  // Garis Hijau untuk BUY, Garis Merah untuk SELL (meminimalkan drawdown)
+  const entryPrice = Number(latestBar.filter.toFixed(2));
   const slPipsDistance = 5.0; // 50 pips on Gold XAU/USD
 
   let recommendedSL = entryPrice;

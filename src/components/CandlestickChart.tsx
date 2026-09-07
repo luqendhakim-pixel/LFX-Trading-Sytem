@@ -36,7 +36,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = memo(({
   onSymbolChange,
   activeSignalPrice,
 }) => {
-  const timeframes: Timeframe[] = ["M1", "M5", "M15", "H1", "H4", "D1"];
+  const timeframes: Timeframe[] = ["M1", "M3", "M5", "M15", "H1", "H4", "D1"];
 
   return (
     <div

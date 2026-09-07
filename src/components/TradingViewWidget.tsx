@@ -13,6 +13,8 @@ const mapTimeframeToTVInterval = (tf: Timeframe): string => {
   switch (tf) {
     case "M1":
       return "1";
+    case "M3":
+      return "3";
     case "M5":
       return "5";
     case "M15":

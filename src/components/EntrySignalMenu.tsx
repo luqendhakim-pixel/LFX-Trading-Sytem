@@ -35,7 +35,7 @@ interface EntrySignalMenuProps {
   onEngineModeChange?: (mode: SignalEngineMode) => void;
 }
 
-const timeframes: Timeframe[] = ["M1", "M5", "M15", "H1", "H4", "D1"];
+const timeframes: Timeframe[] = ["M1", "M3", "M5", "M15", "H1", "H4", "D1"];
 
 export const EntrySignalMenu: React.FC<EntrySignalMenuProps> = ({
   currentSignal,

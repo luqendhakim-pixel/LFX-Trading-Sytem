@@ -47,6 +47,75 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
 
   const isLive = signal.status === "ACTIVE";
 
+  // Determine final exit position for historical closed signals (TP1/TP2/TP3/TP4, SL, or Break Even)
+  const closedExit = useMemo(() => {
+    const status = signal.signalStatus || "";
+    const res = signal.closeResult;
+    const realizedPips = signal.realizedPips;
+
+    // 1. Explicit closePrice if set and valid
+    if (signal.closePrice && signal.closePrice > 0) {
+      if (status.includes("TP4") || realizedPips === 200) {
+        return { price: signal.closePrice, label: "TP4 HIT (+200p)", outcome: "TP" as const, pips: 200 };
+      }
+      if (status.includes("TP3") || realizedPips === 150) {
+        return { price: signal.closePrice, label: "TP3 HIT (+150p)", outcome: "TP" as const, pips: 150 };
+      }
+      if (status.includes("TP2") || realizedPips === 100) {
+        return { price: signal.closePrice, label: "TP2 HIT (+100p)", outcome: "TP" as const, pips: 100 };
+      }
+      if (status.includes("TP1") || realizedPips === 50) {
+        return { price: signal.closePrice, label: "TP1 HIT (+50p)", outcome: "TP" as const, pips: 50 };
+      }
+      if (status.includes("BREAK EVEN") || status.includes("BE") || res === "BE" || realizedPips === 0) {
+        return { price: signal.closePrice, label: "BREAK EVEN (0p)", outcome: "BE" as const, pips: 0 };
+      }
+      if (status.includes("SL") || res === "LOSS" || (realizedPips !== undefined && realizedPips < 0)) {
+        return { price: signal.closePrice, label: "SL HIT (-50p)", outcome: "SL" as const, pips: -50 };
+      }
+      const p = realizedPips ?? (isBuy ? Math.round((signal.closePrice - entry) * 10) : Math.round((entry - signal.closePrice) * 10));
+      return {
+        price: signal.closePrice,
+        label: p > 0 ? `TP WIN (+${p}p)` : p === 0 ? "BREAK EVEN (0p)" : `SL HIT (${p}p)`,
+        outcome: p > 0 ? ("TP" as const) : p === 0 ? ("BE" as const) : ("SL" as const),
+        pips: p,
+      };
+    }
+
+    // 2. Derive by status
+    if (status === "TP4 HIT" || status.includes("TP4")) {
+      return { price: tp4, label: "TP4 HIT (+200p)", outcome: "TP" as const, pips: 200 };
+    }
+    if (status === "TP3 HIT" || status.includes("TP3")) {
+      return { price: tp3, label: "TP3 HIT (+150p)", outcome: "TP" as const, pips: 150 };
+    }
+    if (status === "TP2 HIT" || status.includes("TP2")) {
+      return { price: tp2, label: "TP2 HIT (+100p)", outcome: "TP" as const, pips: 100 };
+    }
+    if (status === "TP1 HIT" || status.includes("TP1")) {
+      return { price: tp1, label: "TP1 HIT (+50p)", outcome: "TP" as const, pips: 50 };
+    }
+    if (status === "BREAK EVEN" || status.includes("BE") || res === "BE") {
+      return { price: signal.beTriggeredPrice || entry, label: "BREAK EVEN (0p)", outcome: "BE" as const, pips: 0 };
+    }
+    if (status === "SL HIT" || status.includes("SL") || res === "LOSS") {
+      return { price: sl, label: "SL HIT (-50p)", outcome: "SL" as const, pips: -50 };
+    }
+
+    // 3. Fallback by realizedPips
+    if (realizedPips !== undefined) {
+      if (realizedPips >= 200) return { price: tp4, label: "TP4 HIT (+200p)", outcome: "TP" as const, pips: 200 };
+      if (realizedPips >= 150) return { price: tp3, label: "TP3 HIT (+150p)", outcome: "TP" as const, pips: 150 };
+      if (realizedPips >= 100) return { price: tp2, label: "TP2 HIT (+100p)", outcome: "TP" as const, pips: 100 };
+      if (realizedPips >= 50) return { price: tp1, label: "TP1 HIT (+50p)", outcome: "TP" as const, pips: 50 };
+      if (realizedPips === 0) return { price: entry, label: "BREAK EVEN (0p)", outcome: "BE" as const, pips: 0 };
+      if (realizedPips < 0) return { price: sl, label: "SL HIT (-50p)", outcome: "SL" as const, pips: -50 };
+    }
+
+    // 4. Default fallback: TP1 win
+    return { price: tp1, label: "TP1 WIN (+50p)", outcome: "TP" as const, pips: 50 };
+  }, [signal, entry, sl, tp1, tp2, tp3, tp4, isBuy]);
+
   // Dynamic World Market Session calculation
   const sessionInfo = useMemo(() => {
     if (isLive) {
@@ -60,12 +129,15 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
   const zoneLow = (signal.entryZoneLow || (isBuy ? entry - 3.0 : entry)).toFixed(3);
   const zoneHigh = (signal.entryZoneHigh || (isBuy ? entry : entry + 3.0)).toFixed(3);
 
-  // Real-time floating pips calculation
+  // Real-time floating pips for live signals OR final realized pips for closed signals
   const floatingPips = useMemo(() => {
+    if (!isLive) {
+      return closedExit.pips;
+    }
     if (!currentLivePrice || !entry) return 0;
     const diff = isBuy ? currentLivePrice - entry : entry - currentLivePrice;
     return Math.round(diff * 10);
-  }, [currentLivePrice, entry, isBuy]);
+  }, [isLive, closedExit.pips, currentLivePrice, entry, isBuy]);
 
   // Status mapping
   const currentStatus = signal.signalStatus || (signal.status === "ACTIVE" ? "ACTIVE" : "SL HIT");
@@ -125,11 +197,14 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
     if (status === "TP4 HIT") return "TP4 WIN (+200p)";
     if (status === "BREAK EVEN") return "HIT BE · CLOSED (0p)";
     if (status === "SL HIT") return "SL HIT · CLOSED";
-    return "CLOSED (RIWAYAT)";
+    return `CLOSED (${closedExit.label})`;
   };
 
-  // True mathematical price range bounding
-  const allLevels = [sl, entry, tp1, tp2, tp3, tp4, currentLivePrice];
+  // True mathematical price range bounding (Never include currentLivePrice for closed signals!)
+  const allLevels = isLive
+    ? [sl, entry, tp1, tp2, tp3, tp4, currentLivePrice]
+    : [sl, entry, tp1, tp2, tp3, tp4, closedExit.price];
+
   const minRaw = Math.min(...allLevels);
   const maxRaw = Math.max(...allLevels);
   const padding = Math.max((maxRaw - minRaw) * 0.12, 1.5);
@@ -143,26 +218,106 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
     return Math.max(4, Math.min(96, pct));
   };
 
-  // Mock visual candles generated along the trajectory
+  // Candlestick sequence: Live signals track current market tick, while closed historical signals
+  // remain completely STATIC and smoothly track the completed trade path straight to the final exit price!
   const mockCandleData = useMemo(() => {
-    const step = isBuy ? 0.65 : -0.65;
-    const base = entry - (isBuy ? 2.5 : -2.5);
-    return [
-      { open: base, close: base + step * 0.7, high: base + step * 1.1, low: base - 0.4 },
-      { open: base + step * 0.7, close: base + step * 1.4, high: base + step * 1.7, low: base + step * 0.4 },
-      { open: base + step * 1.4, close: base + step * 2.0, high: base + step * 2.3, low: base + step * 1.0 },
-      { open: base + step * 2.0, close: base + step * 1.6, high: base + step * 2.4, low: base + step * 1.2 },
-      { open: base + step * 1.6, close: base + step * 2.7, high: base + step * 3.0, low: base + step * 1.4 },
-      { open: base + step * 2.7, close: base + step * 3.5, high: base + step * 3.9, low: base + step * 2.3 },
-      { open: base + step * 3.5, close: base + step * 3.1, high: base + step * 3.8, low: base + step * 2.7 },
-      { open: base + step * 3.1, close: base + step * 4.2, high: base + step * 4.6, low: base + step * 2.9 },
-      { open: base + step * 4.2, close: base + step * 3.8, high: base + step * 4.5, low: base + step * 3.5 },
-      { open: base + step * 3.8, close: currentLivePrice, high: Math.max(currentLivePrice, base + step * 4.5), low: Math.min(currentLivePrice, base + step * 3.4) },
-    ].map((c) => ({
-      ...c,
-      isGreen: c.close >= c.open,
-    }));
-  }, [entry, isBuy, currentLivePrice]);
+    if (isLive) {
+      const step = isBuy ? 0.65 : -0.65;
+      const base = entry - (isBuy ? 2.5 : -2.5);
+      return [
+        { open: base, close: base + step * 0.7, high: base + step * 1.1, low: base - 0.4 },
+        { open: base + step * 0.7, close: base + step * 1.4, high: base + step * 1.7, low: base + step * 0.4 },
+        { open: base + step * 1.4, close: base + step * 2.0, high: base + step * 2.3, low: base + step * 1.0 },
+        { open: base + step * 2.0, close: base + step * 1.6, high: base + step * 2.4, low: base + step * 1.2 },
+        { open: base + step * 1.6, close: base + step * 2.7, high: base + step * 3.0, low: base + step * 1.4 },
+        { open: base + step * 2.7, close: base + step * 3.5, high: base + step * 3.9, low: base + step * 2.3 },
+        { open: base + step * 3.5, close: base + step * 3.1, high: base + step * 3.8, low: base + step * 2.7 },
+        { open: base + step * 3.1, close: base + step * 4.2, high: base + step * 4.6, low: base + step * 2.9 },
+        { open: base + step * 4.2, close: base + step * 3.8, high: base + step * 4.5, low: base + step * 3.5 },
+        { open: base + step * 3.8, close: currentLivePrice, high: Math.max(currentLivePrice, base + step * 4.5), low: Math.min(currentLivePrice, base + step * 3.4) },
+      ].map((c) => ({
+        ...c,
+        isGreen: c.close >= c.open,
+      }));
+    }
+
+    // STATIC HISTORY: Path from Entry to exact exit level (TP / SL / BE)
+    const targetExit = closedExit.price;
+    const bars: { open: number; close: number; high: number; low: number; isGreen: boolean }[] = [];
+
+    if (closedExit.outcome === "BE") {
+      // Pushed favorably +30p towards TP1, triggering BE, then retraced back to Entry level
+      const peakDelta = isBuy ? 3.2 : -3.2;
+      const path = [
+        entry - (isBuy ? 0.8 : -0.8),
+        entry,
+        entry + peakDelta * 0.35,
+        entry + peakDelta * 0.7,
+        entry + peakDelta,
+        entry + peakDelta * 0.85,
+        entry + peakDelta * 0.55,
+        entry + peakDelta * 0.3,
+        entry + (isBuy ? 0.6 : -0.6),
+        targetExit, // Ends cleanly at Break Even price
+      ];
+
+      for (let i = 0; i < path.length - 1; i++) {
+        const o = Number(path[i].toFixed(3));
+        const cl = Number(path[i + 1].toFixed(3));
+        const h = Number((Math.max(o, cl) + 0.45).toFixed(3));
+        const l = Number((Math.min(o, cl) - 0.45).toFixed(3));
+        bars.push({ open: o, close: cl, high: h, low: l, isGreen: cl >= o });
+      }
+    } else if (closedExit.outcome === "SL") {
+      // Rejection from entry downwards/upwards towards Stop Loss
+      const path = [
+        entry + (isBuy ? 0.5 : -0.5),
+        entry,
+        entry + (isBuy ? 1.0 : -1.0),
+        entry + (isBuy ? 0.2 : -0.2),
+        entry - (isBuy ? 1.2 : -1.2),
+        entry - (isBuy ? 2.3 : -2.3),
+        entry - (isBuy ? 3.3 : -3.3),
+        entry - (isBuy ? 4.2 : -4.2),
+        targetExit, // Ends cleanly at SL level
+      ];
+
+      for (let i = 0; i < path.length - 1; i++) {
+        const o = Number(path[i].toFixed(3));
+        const cl = Number(path[i + 1].toFixed(3));
+        const h = Number((Math.max(o, cl) + 0.5).toFixed(3));
+        const l = Number((Math.min(o, cl) - 0.5).toFixed(3));
+        bars.push({ open: o, close: cl, high: h, low: l, isGreen: cl >= o });
+      }
+    } else {
+      // TP WIN: Smooth impulse-retrace-expansion wave terminating right at the hit TP price
+      const delta = targetExit - entry;
+      const fractions = [
+        -0.08, // Pre-entry setup
+        0.0,   // Entry level
+        0.18,  // Initial thrust
+        0.36,  // Momentum expansion
+        0.28,  // Minor healthy pull
+        0.55,  // TP1 breach
+        0.72,  // Extension
+        0.65,  // Pause
+        0.86,  // Final push
+        0.95,  // Test target
+        1.0,   // Final bar closes exactly on TP level
+      ];
+
+      for (let i = 0; i < fractions.length - 1; i++) {
+        const o = Number((entry + delta * fractions[i]).toFixed(3));
+        const cl = Number((entry + delta * fractions[i + 1]).toFixed(3));
+        const wickExtra = Math.abs(delta) * 0.04 + 0.35;
+        const h = Number((Math.max(o, cl) + wickExtra).toFixed(3));
+        const l = Number((Math.min(o, cl) - wickExtra).toFixed(3));
+        bars.push({ open: o, close: cl, high: h, low: l, isGreen: cl >= o });
+      }
+    }
+
+    return bars;
+  }, [isLive, isBuy, entry, currentLivePrice, closedExit]);
 
   return (
     <div
@@ -199,17 +354,17 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {floatingPips !== 0 && (
-              <span
-                className={`text-xs font-mono font-black px-2 py-0.5 rounded-lg border ${
-                  floatingPips > 0
-                    ? "bg-emerald-950/80 text-emerald-400 border-emerald-500/40"
-                    : "bg-rose-950/80 text-rose-400 border-rose-500/40"
-                }`}
-              >
-                {floatingPips > 0 ? `+${floatingPips}` : floatingPips} pips
-              </span>
-            )}
+            <span
+              className={`text-xs font-mono font-black px-2 py-0.5 rounded-lg border ${
+                floatingPips > 0
+                  ? "bg-emerald-950/80 text-emerald-400 border-emerald-500/40"
+                  : floatingPips === 0
+                  ? "bg-blue-950/80 text-blue-300 border-blue-500/40"
+                  : "bg-rose-950/80 text-rose-400 border-rose-500/40"
+              }`}
+            >
+              {floatingPips > 0 ? `+${floatingPips}` : floatingPips} pips {!isLive ? "(CLOSED)" : ""}
+            </span>
             <span
               className={`px-3 py-0.5 rounded-full text-xs font-black tracking-wide border uppercase whitespace-nowrap ${getStatusBadge(
                 currentStatus
@@ -236,13 +391,11 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
                     : currentStatus === "TP3 HIT"
                     ? "🎯 POSISI LIVE: TP3 HIT (+150 PIPS) · RUNNING"
                     : "⚡ POSISI LIVE SEDANG BERJALAN"
-                  : currentStatus === "SL HIT"
-                  ? "🛑 RIWAYAT: STOP LOSS HIT (CLOSED)"
-                  : currentStatus === "BREAK EVEN"
-                  ? "⚖️ RIWAYAT: HIT BREAK EVEN (CLOSED - 0 PIPS)"
-                  : currentStatus.includes("TP")
-                  ? `🏆 RIWAYAT: WIN ${signal.realizedPips ? `+${signal.realizedPips} PIPS` : "TARGET HIT"} (CLOSED)`
-                  : "🔒 RIWAYAT: POSISI SELESAI (CLOSED)"}
+                  : closedExit.outcome === "TP"
+                  ? `🏆 RIWAYAT: WIN TARGET TERCAPAI (${closedExit.label})`
+                  : closedExit.outcome === "BE"
+                  ? "⚖️ RIWAYAT: HIT BREAK EVEN (CLOSED 0 PIPS)"
+                  : "🛑 RIWAYAT: STOP LOSS HIT (CLOSED)"}
               </span>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
@@ -252,13 +405,11 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
                   : currentStatus === "TP1 HIT"
                   ? `Target 1 tercapai (+50 pips). Amankan profit 50% lot, sisa lot dibiarkan running menuju TP2/3/4 dengan Stop Loss di Entry (BE).`
                   : `Posisi sedang aktif berjalan di pasar live XAU/USD. Terus pantau level Target dan Stop Loss.`
-                : currentStatus === "SL HIT"
-                ? `Posisi historis telah selesai karena menyentuh level Stop Loss ($${sl.toFixed(2)}).`
-                : currentStatus === "BREAK EVEN"
-                ? `Posisi historis telah selesai tanpa kerugian (0 pips) saat harga kembali ke titik Entry ($${entry.toFixed(2)}).`
-                : currentStatus.includes("TP")
-                ? `Sinyal telah sukses mencapai target profit (+${signal.realizedPips || 50} pips) dan telah diarsipkan dalam riwayat trading.`
-                : `Sinyal telah selesai dan diarsipkan saat sinyal setup baru dirilis.`}
+                : closedExit.outcome === "TP"
+                ? `Posisi telah sukses ditutup di target ${closedExit.label} pada harga $${closedExit.price.toFixed(2)}. Grafik riwayat terkunci statis pada hasil akhir.`
+                : closedExit.outcome === "BE"
+                ? `Posisi sempat mengamankan profit lalu ditutup di titik Entry (Break Even) pada harga $${closedExit.price.toFixed(2)} (0 pips) tanpa kerugian modal.`
+                : `Posisi telah ditutup pada batas proteksi risiko Stop Loss di harga $${closedExit.price.toFixed(2)} (-50 pips). Grafik riwayat terkunci statis pada hasil akhir.`}
             </p>
           </div>
         )}
@@ -266,11 +417,17 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
         {/* 4 Metric Grid (ENTRY, STOP LOSS, RISK / REWARD, SESI) */}
         <div className="grid grid-cols-2 gap-y-3 gap-x-4 pt-2 border-t border-slate-800/60 font-mono">
           <div>
-            <div className="text-[11px] font-sans font-semibold text-slate-400 uppercase tracking-wider">
-              ENTRY
+            <div className="text-[11px] font-sans font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>ENTRY</span>
+              <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-bold ${isBuy ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/20 text-rose-400 border border-rose-500/30"}`}>
+                {isBuy ? "Garis Hijau" : "Garis Merah"}
+              </span>
             </div>
             <div className="text-lg sm:text-xl font-black text-slate-100 tracking-tight">
-              {entry.toFixed(3)}
+              {entry.toFixed(2)}
+            </div>
+            <div className="text-[10.5px] text-slate-400 font-sans mt-0.5">
+              Area: ${signal.entryZoneLow?.toFixed(2)} - ${signal.entryZoneHigh?.toFixed(2)}
             </div>
           </div>
 
@@ -414,9 +571,24 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-slate-400">Entry: {entry.toFixed(3)}</span>
-              <span className="text-xs font-extrabold text-white bg-slate-800/80 px-2 py-0.5 rounded">
-                ${currentLivePrice.toFixed(3)}
-              </span>
+              {isLive ? (
+                <span className="text-xs font-extrabold text-white bg-slate-800/80 px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  ${currentLivePrice.toFixed(3)}
+                </span>
+              ) : (
+                <span
+                  className={`text-xs font-black px-2 py-0.5 rounded border font-mono ${
+                    closedExit.outcome === "TP"
+                      ? "bg-emerald-950/90 text-emerald-300 border-emerald-500/50"
+                      : closedExit.outcome === "BE"
+                      ? "bg-blue-950/90 text-blue-300 border-blue-500/50"
+                      : "bg-rose-950/90 text-rose-300 border-rose-500/50"
+                  }`}
+                >
+                  Close: ${closedExit.price.toFixed(3)} ({closedExit.label})
+                </span>
+              )}
             </div>
           </div>
 
@@ -587,23 +759,48 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
               </span>
             </div>
 
-            {/* Live Price Tag Indicator */}
-            {Math.abs(currentLivePrice - entry) > 0.02 && (
+            {/* Live Price Tag Indicator OR Closed Exit Level Line */}
+            {isLive ? (
+              Math.abs(currentLivePrice - entry) > 0.02 && (
+                <div
+                  className="absolute left-0 right-0 border-b-2 border-dotted border-amber-400 flex items-center justify-end pr-2 z-25 pointer-events-none"
+                  style={{ top: `${getY(currentLivePrice)}%` }}
+                >
+                  <span className="text-[8px] sm:text-[9px] font-mono font-black text-amber-300 bg-amber-950/90 border border-amber-500/60 px-1.5 py-0.2 rounded shadow -top-2.5 relative flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                    LIVE ${currentLivePrice.toFixed(3)}
+                  </span>
+                </div>
+              )
+            ) : (
               <div
-                className="absolute left-0 right-0 border-b-2 border-dotted border-amber-400 flex items-center justify-end pr-2 z-25 pointer-events-none"
-                style={{ top: `${getY(currentLivePrice)}%` }}
+                className={`absolute left-0 right-0 border-b-2 flex items-center justify-end pr-2 z-25 pointer-events-none ${
+                  closedExit.outcome === "TP"
+                    ? "border-emerald-400/80"
+                    : closedExit.outcome === "BE"
+                    ? "border-cyan-400/80"
+                    : "border-rose-400/80"
+                }`}
+                style={{ top: `${getY(closedExit.price)}%` }}
               >
-                <span className="text-[8px] sm:text-[9px] font-mono font-black text-amber-300 bg-amber-950/90 border border-amber-500/60 px-1.5 py-0.2 rounded shadow -top-2.5 relative flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-                  LIVE ${currentLivePrice.toFixed(3)}
+                <span
+                  className={`text-[8px] sm:text-[9px] font-mono font-black px-2 py-0.5 rounded shadow -top-3 relative flex items-center gap-1 border ${
+                    closedExit.outcome === "TP"
+                      ? "text-emerald-200 bg-emerald-950/95 border-emerald-400/80"
+                      : closedExit.outcome === "BE"
+                      ? "text-cyan-200 bg-cyan-950/95 border-cyan-400/80"
+                      : "text-rose-200 bg-rose-950/95 border-rose-400/80"
+                  }`}
+                >
+                  🏁 CLOSED @ ${closedExit.price.toFixed(3)} ({closedExit.label})
                 </span>
               </div>
             )}
           </div>
 
-          {/* Timeframe Selector Buttons (M15, H1, H4, D1) */}
-          <div className="flex items-center gap-1.5 pt-2 border-t border-slate-800/80">
-            {(["M15", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
+          {/* Timeframe Selector Buttons (M1, M3, M5, M15, H1, H4, D1) */}
+          <div className="flex items-center gap-1.5 pt-2 border-t border-slate-800/80 overflow-x-auto pb-1 no-scrollbar">
+            {(["M1", "M3", "M5", "M15", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
               <button
                 key={tf}
                 onClick={() => setSelectedTf(tf)}

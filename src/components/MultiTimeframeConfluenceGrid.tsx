@@ -43,11 +43,17 @@ interface MultiTimeframeConfluenceGridProps {
 
 export const MultiTimeframeConfluenceGrid: React.FC<MultiTimeframeConfluenceGridProps> = ({
   currentPrice = 4454.50,
-  selectedTimeframe = "H1",
+  selectedTimeframe = "M3",
   onSelectTimeframe,
   compact = false,
 }) => {
-  const [activeTf, setActiveTf] = useState<Timeframe>(selectedTimeframe);
+  const [activeTf, setActiveTf] = useState<Timeframe>(selectedTimeframe || "M3");
+
+  React.useEffect(() => {
+    if (selectedTimeframe) {
+      setActiveTf(selectedTimeframe);
+    }
+  }, [selectedTimeframe]);
 
   // Dynamic realistic multi-timeframe engine bound directly to current real-time price
   const tfData: Record<Timeframe, TimeframeAnalysisData> = useMemo(() => {
@@ -70,6 +76,23 @@ export const MultiTimeframeConfluenceGrid: React.FC<MultiTimeframeConfluenceGrid
         keyZoneRange: `$${(p - 0.70).toFixed(2)} - $${(p - 0.30).toFixed(2)}`,
         rationale:
           "Timeframe 1m sedang dalam fase koreksi mikro (Bearish Pullback) menyapu likuiditas jangka pendek menuju zona Demand FVG sebelum dorongan impulsif baru.",
+      },
+      M3: {
+        timeframe: "M3",
+        label: "3 Menit (Micro Momentum & Scalp)",
+        trend: "BEARISH",
+        trendBadge: "BEARISH (STEP FILTER RED)",
+        smcStructure: "Liquidity Sweep Asian Range",
+        tssState: "BELOW_FILTER",
+        tssStateLabel: "Below ALMA Step Filter ($" + (p + 0.45).toFixed(2) + ")",
+        rsiValue: 44,
+        rsiZone: "BEARISH_PULLBACK",
+        isAligned: false,
+        score: 72,
+        keyZoneTitle: "Zona Supply / Step Filter Retest",
+        keyZoneRange: `$${(p + 0.30).toFixed(2)} - $${(p + 0.80).toFixed(2)}`,
+        rationale:
+          "Timeframe 3m mencerminkan posisi harga di bawah Step Filter ALMA. Sesuai Pine Script v6, kondisi saat ini berada dalam state Bearish (-1) menunggu breakout untuk sinyal Buy baru.",
       },
       M5: {
         timeframe: "M5",
@@ -159,7 +182,7 @@ export const MultiTimeframeConfluenceGrid: React.FC<MultiTimeframeConfluenceGrid
     };
   }, [currentPrice]);
 
-  const frames: Timeframe[] = ["M1", "M5", "M15", "H1", "H4", "D1"];
+  const frames: Timeframe[] = ["M1", "M3", "M5", "M15", "H1", "H4", "D1"];
   const totalScore = Math.round(
     frames.reduce((acc, tf) => acc + tfData[tf].score, 0) / frames.length
   );
@@ -192,8 +215,8 @@ export const MultiTimeframeConfluenceGrid: React.FC<MultiTimeframeConfluenceGrid
           </span>
         </div>
 
-        {/* 6 mini pills */}
-        <div className="grid grid-cols-6 gap-1.5 pt-1">
+        {/* 7 mini pills */}
+        <div className="grid grid-cols-7 gap-1.5 pt-1">
           {frames.map((tf) => {
             const data = tfData[tf];
             const isBull = data.trend === "BULLISH";
@@ -282,7 +305,7 @@ export const MultiTimeframeConfluenceGrid: React.FC<MultiTimeframeConfluenceGrid
       </div>
 
       {/* Timeframe Grid Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
         {frames.map((tf) => {
           const item = tfData[tf];
           const isSelected = activeTf === tf;

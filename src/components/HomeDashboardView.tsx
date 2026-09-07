@@ -49,6 +49,8 @@ interface HomeDashboardViewProps {
   currentSignal: AISignal | null;
   currentPrice?: number;
   candles?: Candle[];
+  selectedTimeframe?: Timeframe;
+  onSelectTimeframe?: (tf: Timeframe) => void;
   onOpenEducationModal: () => void;
   onOpenContestModal: () => void;
   onRequestPushNotification: () => void;
@@ -66,6 +68,8 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   currentSignal,
   currentPrice = 4454.50,
   candles,
+  selectedTimeframe = "M5",
+  onSelectTimeframe,
   onOpenEducationModal,
   onOpenContestModal,
   onRequestPushNotification,
@@ -79,7 +83,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   const [isCalendarPickerOpen, setIsCalendarPickerOpen] = useState(false);
   const [isWinRateModalOpen, setIsWinRateModalOpen] = useState(false);
   const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
-  const [selectedTf, setSelectedTf] = useState<Timeframe>("H1");
+  const activeTf = selectedTimeframe || "M5";
 
   const isAdmin =
     currentUser?.role === "ADMIN" ||
@@ -454,24 +458,24 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
 
             {/* Timeframe pills */}
             <div className="flex items-center gap-1.5 flex-wrap">
-              {(["M1", "M5", "M15", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
+              {(["M1", "M3", "M5", "M15", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
                 <button
                   key={tf}
-                  onClick={() => setSelectedTf(tf)}
+                  onClick={() => onSelectTimeframe?.(tf)}
                   className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    selectedTf === tf
+                    activeTf === tf
                       ? "bg-sky-500 text-slate-950 shadow font-black"
                       : "bg-[#0d1326] text-slate-400 hover:text-slate-200 border border-slate-800"
                   }`}
                 >
-                  {tf === "M1" ? "1m" : tf === "M5" ? "5m" : tf === "M15" ? "15m" : tf === "H1" ? "1H" : tf === "H4" ? "4H" : "D1"}
+                  {tf === "M1" ? "1m" : tf === "M3" ? "3m" : tf === "M5" ? "5m" : tf === "M15" ? "15m" : tf === "H1" ? "1H" : tf === "H4" ? "4H" : "D1"}
                 </button>
               ))}
             </div>
 
             {/* Direct TradingView Widget Container */}
             <div className="w-full h-80 lg:h-[420px] rounded-2xl overflow-hidden border border-slate-800/80 bg-[#05070c]">
-              <TradingViewWidget symbol="OANDA:XAUUSD" theme="dark" timeframe={selectedTf} />
+              <TradingViewWidget symbol="OANDA:XAUUSD" theme="dark" timeframe={activeTf} />
             </div>
           </div>
         </div>
@@ -535,8 +539,8 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
           {/* 5. Matrix Konfluensi Multi-Timeframe (M1 - D1 Grid) */}
           <MultiTimeframeConfluenceGrid
             currentPrice={currentPrice}
-            selectedTimeframe={selectedTf}
-            onSelectTimeframe={(tf) => setSelectedTf(tf)}
+            selectedTimeframe={activeTf}
+            onSelectTimeframe={(tf) => onSelectTimeframe?.(tf)}
           />
 
           {/* 6. Section: Signal Terbaru */}

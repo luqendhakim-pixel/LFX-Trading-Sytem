@@ -22,6 +22,7 @@ import {
   calculateLotSize,
 } from "./utils/indicators";
 import { generateInstantSignal } from "./utils/instantSignal";
+import { generateHistoricalSignalsFromCandles } from "./utils/historicalSignalEngine";
 import { soundManager } from "./utils/audio";
 import { realtimeMarketManager, StreamStats } from "./services/realtimeMarket";
 import { notificationService } from "./utils/notificationService";
@@ -50,9 +51,45 @@ import { authService } from "./services/authService";
 import { UserProfile } from "./types";
 import { getTradingSessionName } from "./utils/sessionHelper";
 
-const SIGNALS_STORAGE_KEY = "lfx_signals_list_v2";
+// Generate initial realistic OHLC gold candles
+export function generateInitialGoldCandles(count: number = 80, basePrice: number = 4405.5): Candle[] {
+  const candles: Candle[] = [];
+  let currentPrice = basePrice;
+  const now = Date.now();
+  const stepMs = 5 * 60 * 1000;
+
+  for (let i = count; i >= 0; i--) {
+    const time = now - i * stepMs;
+    const volatility = 1.2 + Math.random() * 1.8;
+    const delta = (Math.random() - 0.49) * volatility;
+    const open = currentPrice;
+    const close = open + delta;
+    const high = Math.max(open, close) + Math.random() * volatility * 0.8;
+    const low = Math.min(open, close) - Math.random() * volatility * 0.8;
+    const volume = Math.floor(100 + Math.random() * 400);
+
+    currentPrice = close;
+    candles.push({
+      time,
+      open: Number(open.toFixed(2)),
+      high: Number(high.toFixed(2)),
+      low: Number(low.toFixed(2)),
+      close: Number(close.toFixed(2)),
+      volume,
+    });
+  }
+  return candles;
+}
+
+const SIGNALS_STORAGE_KEY = "lfx_tss_historical_signals_v5";
 
 export function generateInitialSignals(): AISignal[] {
+  const initialCandles = generateInitialGoldCandles(80, 4405.5);
+  const { signalsList } = generateHistoricalSignalsFromCandles(initialCandles, "M5", 4405.5);
+  return signalsList;
+}
+
+function _unusedLegacySignals(): AISignal[] {
   const now = Date.now();
   const formatWib = (ms: number) => {
     return (
@@ -76,28 +113,31 @@ export function generateInitialSignals(): AISignal[] {
     {
       id: "SIG-XAU-01",
       symbol: "XAUUSD",
-      signalType: "BUY",
-      entryPrice: 4453.44,
-      stopLoss: 4448.44,
-      takeProfit1: 4458.44,
-      takeProfit2: 4463.44,
-      takeProfit3: 4468.44,
-      takeProfit4: 4473.44,
-      signalStatus: "ACTIVE",
-      status: "ACTIVE",
+      signalType: "SELL",
+      entryPrice: 4454.20,
+      stopLoss: 4459.20,
+      takeProfit1: 4449.20,
+      takeProfit2: 4444.20,
+      takeProfit3: 4439.20,
+      takeProfit4: 4434.20,
+      signalStatus: "TP1 HIT",
+      status: "COMPLETED",
+      realizedPips: 50,
+      closeResult: "WIN",
       riskRewardRatio: "1 : 2.0",
       session: getTradingSessionName(),
-      entryZoneLow: 4451.50,
-      entryZoneHigh: 4454.50,
+      entryZoneLow: 4453.00,
+      entryZoneHigh: 4455.50,
       createdAt: now - 35 * 60 * 1000,
+      closedAt: now - 15 * 60 * 1000,
       formattedTimeWib: formatWib(now - 35 * 60 * 1000),
       timestamp: formatShortTime(now - 35 * 60 * 1000),
-      timeframe: "H1",
-      trendDirection: "BULLISH",
+      timeframe: "M3",
+      trendDirection: "BEARISH",
       strength: 92,
       confidenceScore: 92,
-      primaryReason: "TradingView TSS v6: ALMA Step Filter Bullish Breakout & Demand Order Block",
-      technicalFactors: ["ALMA Step Filter Support", "RSI 58 Golden Zone", "EMA 20/50 Bullish Cross"],
+      primaryReason: "TradingView TSS v6: ALMA Step Filter Breakdown & Supply Retest",
+      technicalFactors: ["ALMA Step Filter Red", "RSI 44 Pullback", "Step Filter Resistance"],
       pipsSl: 50,
       pipsTp1: 50,
       pipsTp2: 100,
@@ -560,36 +600,6 @@ const INITIAL_POSITIONS: Position[] = [
   },
 ];
 
-// Generate initial realistic OHLC gold candles
-function generateInitialGoldCandles(count: number = 80, basePrice: number = 4589.5): Candle[] {
-  const candles: Candle[] = [];
-  let currentPrice = basePrice;
-  const now = Date.now();
-  const stepMs = 5 * 60 * 1000;
-
-  for (let i = count; i >= 0; i--) {
-    const time = now - i * stepMs;
-    const volatility = 1.2 + Math.random() * 1.8;
-    const delta = (Math.random() - 0.49) * volatility;
-    const open = currentPrice;
-    const close = open + delta;
-    const high = Math.max(open, close) + Math.random() * volatility * 0.8;
-    const low = Math.min(open, close) - Math.random() * volatility * 0.8;
-    const volume = Math.floor(100 + Math.random() * 400);
-
-    currentPrice = close;
-    candles.push({
-      time,
-      open: Number(open.toFixed(2)),
-      high: Number(high.toFixed(2)),
-      low: Number(low.toFixed(2)),
-      close: Number(close.toFixed(2)),
-      volume,
-    });
-  }
-  return candles;
-}
-
 export default function App() {
   const lastNotifiedSignalKeyRef = useRef<string>("");
   const lastSignalNotifiedTimestampRef = useRef<number>(0);
@@ -651,7 +661,7 @@ export default function App() {
   };
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [candles, setCandles] = useState<Candle[]>(() => generateInitialGoldCandles(80, 4500.5));
-  const [timeframe, setTimeframe] = useState<Timeframe>("H1");
+  const [timeframe, setTimeframe] = useState<Timeframe>("M5");
   const [streamStats, setStreamStats] = useState<StreamStats>(() => realtimeMarketManager.getStats());
   const [currentTick, setCurrentTick] = useState<Tick>(() => realtimeMarketManager.getLatestTick());
 
@@ -743,77 +753,58 @@ export default function App() {
     }
   };
 
-  // 7. Trigger AI & TradingView Strategy Scan (Preserves Active Signal Real-time Lifecycle)
+  // 7. Trigger AI & TradingView Strategy Scan (Evaluates Complete Candle History from Bar 0 to Live)
   const triggerAiScan = useCallback(
     async (targetTimeframe?: Timeframe, targetCandles?: Candle[], forceNotify: boolean = false) => {
       setIsAiScanning(true);
       const activeTf = targetTimeframe || timeframeRef.current;
       const activeCandles = targetCandles || candlesRef.current;
       const tick = currentTickRef.current;
-      const settings = riskSettingsRef.current;
+      const livePrice = tick.price || (activeCandles.length > 0 ? activeCandles[activeCandles.length - 1].close : 4405.5);
 
       try {
-        if (!forceNotify) {
-          const existingActiveSignal = signalsListRef.current.find(
-            (s) =>
-              (s.signalStatus === "ACTIVE" || s.signalStatus === "BE SET (+30p)" || s.signalStatus === "TP1 HIT" || s.signalStatus === "TP2 HIT" || s.signalStatus === "TP3 HIT") &&
-              s.status === "ACTIVE"
-          );
+        const { signalsList: calculatedSignals, currentSignal: calculatedActiveSignal } =
+          generateHistoricalSignalsFromCandles(activeCandles, activeTf, livePrice);
 
-          if (existingActiveSignal) {
-            setCurrentSignal(existingActiveSignal);
-            return;
+        if (calculatedSignals && calculatedSignals.length > 0) {
+          setSignalsList(calculatedSignals);
+        }
+
+        if (calculatedActiveSignal) {
+          setCurrentSignal(calculatedActiveSignal);
+
+          const isActionable =
+            calculatedActiveSignal.signalType.includes("BUY") ||
+            calculatedActiveSignal.signalType.includes("SELL");
+
+          const setupZoneBucket = Math.round(calculatedActiveSignal.entryPrice / 2.5) * 2.5;
+          const signalKey = `${calculatedActiveSignal.signalType}_${activeTf}_${setupZoneBucket.toFixed(1)}_${Math.round(calculatedActiveSignal.stopLoss)}`;
+
+          const now = Date.now();
+          const cooldownMs = 25000; // 25s responsive cooldown
+          const isCooldownElapsed = now - lastSignalNotifiedTimestampRef.current > cooldownMs;
+          const isNewSetup = lastNotifiedSignalKeyRef.current !== signalKey;
+
+          if (isActionable && (forceNotify || (isNewSetup && isCooldownElapsed))) {
+            lastNotifiedSignalKeyRef.current = signalKey;
+            lastSignalNotifiedTimestampRef.current = now;
+
+            notificationService.playSignalSound();
+            notificationService.sendSignalNotification(calculatedActiveSignal);
+
+            const newToast: SignalToastItem = {
+              id: `toast-${Date.now()}`,
+              signal: calculatedActiveSignal,
+              timeframe: activeTf,
+              createdAt: Date.now(),
+              durationMs: 14000,
+              alertType: "NEW_SIGNAL",
+              customTitle: `🚨 ${calculatedActiveSignal.signalType.replace("_", " ")} ${calculatedActiveSignal.symbol || "XAUUSD"} [${activeTf}]`,
+              customBody: `Sinyal Entry Live di $${calculatedActiveSignal.entryPrice.toFixed(2)} • SL ${calculatedActiveSignal.pipsSl || 50}p • TP1 +${calculatedActiveSignal.pipsTp1 || 50}p`,
+            };
+            setSignalToasts((prev) => [newToast, ...prev.slice(0, 1)]);
           }
         }
-
-        const instantSignal = generateInstantSignal(activeCandles, tick, activeTf, settings);
-        setCurrentSignal(instantSignal);
-
-        const setupZoneBucket = Math.round(instantSignal.entryPrice / 2.5) * 2.5;
-        const signalKey = `${instantSignal.signalType}_${activeTf}_${setupZoneBucket.toFixed(1)}_${Math.round(instantSignal.stopLoss)}`;
-        const isActionable = instantSignal.signalType.includes("BUY") || instantSignal.signalType.includes("SELL");
-
-        const now = Date.now();
-        const cooldownMs = 30000; // 30s responsive cooldown
-        const isCooldownElapsed = now - lastSignalNotifiedTimestampRef.current > cooldownMs;
-        const isNewSetup = lastNotifiedSignalKeyRef.current !== signalKey;
-
-        if (isActionable && (forceNotify || (isNewSetup && isCooldownElapsed) || signalsListRef.current.length === 0)) {
-          lastNotifiedSignalKeyRef.current = signalKey;
-          lastSignalNotifiedTimestampRef.current = now;
-
-          notificationService.playSignalSound();
-          notificationService.sendSignalNotification(instantSignal);
-
-          const newToast: SignalToastItem = {
-            id: `toast-${Date.now()}`,
-            signal: instantSignal,
-            timeframe: activeTf,
-            createdAt: Date.now(),
-            durationMs: 14000,
-            alertType: "NEW_SIGNAL",
-            customTitle: `🚨 ${instantSignal.signalType.replace("_", " ")} ${instantSignal.symbol || "XAUUSD"}`,
-            customBody: `Sinyal Entry Live di $${instantSignal.entryPrice.toFixed(2)} • SL ${instantSignal.pipsSl || 50}p • TP1 +${instantSignal.pipsTp1 || 50}p`,
-          };
-          setSignalToasts((prev) => [newToast, ...prev.slice(0, 1)]);
-        }
-
-        // When a new signal arrives, close all previous active signals (replaced by new signal)
-        setSignalsList((prevList) => {
-          const updatedPrevList = prevList
-            .filter((s) => s.id !== instantSignal.id)
-            .map((s) => {
-              if (s.status === "ACTIVE") {
-                return {
-                  ...s,
-                  status: "COMPLETED" as const,
-                  signalStatus: (s.signalStatus && s.signalStatus.includes("TP") ? s.signalStatus : "CLOSED") as any,
-                };
-              }
-              return s;
-            });
-          return [instantSignal, ...updatedPrevList.slice(0, 24)];
-        });
       } catch (err) {
         console.error("AI scan error:", err);
       } finally {
@@ -821,6 +812,35 @@ export default function App() {
       }
     },
     []
+  );
+
+  // Timeframe switch handler: fetches candles from server, recalculates history from beginning, updates state
+  const handleTimeframeChange = useCallback(
+    async (newTf: Timeframe) => {
+      setTimeframe(newTf);
+      setIsAiScanning(true);
+      try {
+        const loadedCandles = await fetchRealCandles(newTf);
+        const candleSet = loadedCandles && loadedCandles.length > 0 ? loadedCandles : candlesRef.current;
+        if (candleSet && candleSet.length > 0) {
+          setCandles(candleSet);
+          const livePrice = currentTickRef.current.price || candleSet[candleSet.length - 1].close;
+          const { signalsList: calculatedSignals, currentSignal: calculatedActiveSignal } =
+            generateHistoricalSignalsFromCandles(candleSet, newTf, livePrice);
+          if (calculatedSignals && calculatedSignals.length > 0) {
+            setSignalsList(calculatedSignals);
+          }
+          if (calculatedActiveSignal) {
+            setCurrentSignal(calculatedActiveSignal);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to switch timeframe:", err);
+      } finally {
+        setIsAiScanning(false);
+      }
+    },
+    [fetchRealCandles]
   );
 
   // Real-time Target (TP1/TP2/TP3/TP4), Stop Loss & Break Even Engine (+30 Pips automated protection)
@@ -1042,9 +1062,7 @@ export default function App() {
 
     // Fetch initial candles from server
     fetchRealCandles(timeframe).then((loadedCandles) => {
-      // If there is already an active signal in history, do not generate a new signal on reload
-      const hasActive = signalsListRef.current.some((s) => s.status === "ACTIVE");
-      if (!hasActive && loadedCandles && loadedCandles.length > 0) {
+      if (loadedCandles && loadedCandles.length > 0) {
         triggerAiScan(timeframe, loadedCandles);
       }
     });
@@ -1126,6 +1144,8 @@ export default function App() {
             currentSignal={currentSignal}
             currentPrice={currentTick.price}
             candles={candles}
+            selectedTimeframe={timeframe}
+            onSelectTimeframe={handleTimeframeChange}
             onOpenEducationModal={() => setIsEducationModalOpen(true)}
             onOpenContestModal={() => setIsContestModalOpen(true)}
             onRequestPushNotification={handleRequestPushNotification}
@@ -1156,6 +1176,8 @@ export default function App() {
               <SignalsListView
                 signalsList={signalsList}
                 onSelectSignal={handleSelectSignalForDetail}
+                onRefreshScan={() => triggerAiScan(timeframe, candles, true)}
+                isScanning={isAiScanning}
                 isSubscriptionActive={currentUser?.isSubscriptionActive ?? true}
                 onOpenPaywall={() => setIsPaywallModalOpen(true)}
               />
@@ -1176,10 +1198,7 @@ export default function App() {
         {activeNavTab === "INDIKATOR" && (
           <TradingViewIndicatorsView
             timeframe={timeframe}
-            onTimeframeChange={(tf) => {
-              setTimeframe(tf);
-              triggerAiScan(tf, candles);
-            }}
+            onTimeframeChange={handleTimeframeChange}
             candles={candles}
             currentPrice={currentTick.price}
             currentSignal={currentSignal}

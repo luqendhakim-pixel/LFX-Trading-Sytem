@@ -280,9 +280,45 @@ export const DynamicTSSChart: React.FC<DynamicTSSChartProps> = ({
       ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
     });
 
-    // 5. Draw Trend State Step Filter Line (The Core Algorithm)
+    // 5. Draw Trend State Step Filter Gradient Ribbon (TradingView style as shown in screenshot)
+    if (config.showRibbon) {
+      for (let i = 0; i < visibleBars.length - 1; i++) {
+        const b1 = visibleBars[i];
+        const b2 = visibleBars[i + 1];
+        const x1 = paddingLeft + i * barWidth + barWidth / 2;
+        const x2 = paddingLeft + (i + 1) * barWidth + barWidth / 2;
+        const yF1 = getY(b1.filter);
+        const yF2 = getY(b2.filter);
+
+        const isBull = b2.trend === 1;
+        const yRef1 = isBull ? getY(Math.max(b1.close, b1.open)) : getY(Math.min(b1.close, b1.open));
+        const yRef2 = isBull ? getY(Math.max(b2.close, b2.open)) : getY(Math.min(b2.close, b2.open));
+
+        ctx.beginPath();
+        ctx.moveTo(x1, yF1);
+        ctx.lineTo(x2, yF2);
+        ctx.lineTo(x2, yRef2);
+        ctx.lineTo(x1, yRef1);
+        ctx.closePath();
+
+        const minY = Math.min(yF1, yF2, yRef1, yRef2);
+        const maxY = Math.max(yF1, yF2, yRef1, yRef2);
+        const ribbonGrad = ctx.createLinearGradient(0, minY, 0, Math.max(minY + 1, maxY));
+
+        if (isBull) {
+          ribbonGrad.addColorStop(0, "rgba(0, 255, 170, 0.04)");
+          ribbonGrad.addColorStop(1, "rgba(0, 255, 170, 0.38)");
+        } else {
+          ribbonGrad.addColorStop(0, "rgba(255, 59, 48, 0.38)");
+          ribbonGrad.addColorStop(1, "rgba(255, 59, 48, 0.04)");
+        }
+        ctx.fillStyle = ribbonGrad;
+        ctx.fill();
+      }
+    }
+
+    // Outer subtle glow for Step Filter Line
     if (config.showGlow) {
-      // Outer subtle glow
       ctx.lineWidth = isMobile ? 3.5 : 5;
       for (let i = 0; i < visibleBars.length - 1; i++) {
         const b1 = visibleBars[i];
@@ -300,8 +336,8 @@ export const DynamicTSSChart: React.FC<DynamicTSSChartProps> = ({
       }
     }
 
-    // Main Crisp Solid Step Filter Line
-    ctx.lineWidth = isMobile ? 2.0 : 2.5;
+    // Main Crisp Solid Step Filter Line (Garis Hijau untuk BUY, Garis Merah untuk SELL)
+    ctx.lineWidth = isMobile ? 2.2 : 2.8;
     for (let i = 0; i < visibleBars.length - 1; i++) {
       const b1 = visibleBars[i];
       const b2 = visibleBars[i + 1];
@@ -383,8 +419,9 @@ export const DynamicTSSChart: React.FC<DynamicTSSChartProps> = ({
     // 7. Active Signal SL / TP Target Lines (if available)
     if (activeSignalPrice?.entry) {
       const yEntry = getY(activeSignalPrice.entry);
-      ctx.strokeStyle = "rgba(245, 158, 11, 0.8)";
-      ctx.lineWidth = 1.2;
+      const isBuySignal = activeSignalPrice.type === "BUY";
+      ctx.strokeStyle = isBuySignal ? "rgba(0, 255, 170, 0.9)" : "rgba(255, 59, 48, 0.9)";
+      ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.moveTo(paddingLeft, yEntry);
@@ -392,12 +429,12 @@ export const DynamicTSSChart: React.FC<DynamicTSSChartProps> = ({
       ctx.stroke();
 
       // Entry Pill
-      ctx.fillStyle = "#f59e0b";
-      ctx.fillRect(paddingLeft + chartWidth + 2, yEntry - 7, isMobile ? 52 : 62, 14);
-      ctx.fillStyle = "#000000";
+      ctx.fillStyle = isBuySignal ? "#00FFAA" : "#FF3B30";
+      ctx.fillRect(paddingLeft + chartWidth + 2, yEntry - 8, isMobile ? 60 : 70, 16);
+      ctx.fillStyle = isBuySignal ? "#09101d" : "#ffffff";
       ctx.font = `bold ${isMobile ? "8px" : "9px"} ui-monospace`;
       ctx.textAlign = "left";
-      ctx.fillText(`ENT $${activeSignalPrice.entry.toFixed(1)}`, paddingLeft + chartWidth + 4, yEntry + 3);
+      ctx.fillText(`${isBuySignal ? "BUY" : "SELL"} $${activeSignalPrice.entry.toFixed(1)}`, paddingLeft + chartWidth + 4, yEntry + 3);
     }
 
     if (activeSignalPrice?.sl) {

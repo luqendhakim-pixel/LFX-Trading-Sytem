@@ -1,4 +1,4 @@
-export type Timeframe = "M1" | "M5" | "M15" | "H1" | "H4" | "D1";
+export type Timeframe = "M1" | "M3" | "M5" | "M15" | "H1" | "H4" | "D1";
 
 export interface Candle {
   time: number;
@@ -144,12 +144,14 @@ export interface AISignal {
   mobilePushAlert?: MobilePushAlert;
   executionPlan?: string;
   status?: "ACTIVE" | "TRIGGERED" | "EXPIRED" | "COMPLETED";
-  signalStatus?: "ACTIVE" | "BE SET (+30p)" | "TP1 HIT" | "TP2 HIT" | "TP3 HIT" | "TP4 HIT" | "SL HIT" | "BREAK EVEN" | "CLOSED";
+  signalStatus?: "ACTIVE" | "BE SET (+30p)" | "TP1 HIT" | "TP2 HIT" | "TP3 HIT" | "TP4 HIT" | "SL HIT" | "BREAK EVEN" | "CLOSED" | (string & {});
   isBreakevenSet?: boolean;
   effectiveStopLoss?: number;
   beTriggeredPrice?: number;
   realizedPips?: number;
   closeResult?: "WIN" | "LOSS" | "BE";
+  closePrice?: number;
+  exitReason?: string;
   source?: string;
   engineMode?: SignalEngineMode;
   confluences?: ConfluenceCheckItem[];

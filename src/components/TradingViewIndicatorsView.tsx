@@ -90,7 +90,7 @@ export const TradingViewIndicatorsView: React.FC<TradingViewIndicatorsViewProps>
 
       {/* 2. Timeframe Selector Bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-        {(["M1", "M5", "M15", "M30", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
+        {(["M1", "M3", "M5", "M15", "H1", "H4", "D1"] as Timeframe[]).map((tf) => (
           <button
             key={tf}
             onClick={() => handleTimeframeSelect(tf)}

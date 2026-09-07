@@ -31,7 +31,7 @@ interface AISignalPanelProps {
   onSendToMobile: (signal: AISignal) => void;
 }
 
-const timeframes: Timeframe[] = ["M1", "M5", "M15", "H1", "H4", "D1"];
+const timeframes: Timeframe[] = ["M1", "M3", "M5", "M15", "H1", "H4", "D1"];
 
 export const AISignalPanel: React.FC<AISignalPanelProps> = ({
   currentSignal,
@@ -202,11 +202,19 @@ export const AISignalPanel: React.FC<AISignalPanelProps> = ({
             {/* Price Targets Grid (Entry, SL, TP1, TP2) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
               <div className="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800">
-                <span className="text-[10px] text-slate-400 block font-sans">
-                  {currentSignal.signalType === "HOLD" ? "ZONE REFERENCE" : "ENTRY PRICE"}
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 block font-sans">
+                    {currentSignal.signalType === "HOLD" ? "ZONE REFERENCE" : "ENTRY PRICE"}
+                  </span>
+                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${isBuy ? "text-emerald-400 bg-emerald-500/20 border border-emerald-500/30" : isSell ? "text-rose-400 bg-rose-500/20 border border-rose-500/30" : "text-slate-400"}`}>
+                    {isBuy ? "Garis Hijau" : isSell ? "Garis Merah" : "Netral"}
+                  </span>
+                </div>
                 <span className="font-bold text-slate-100 text-sm">
                   ${currentSignal.entryPrice.toFixed(2)}
+                </span>
+                <span className="text-[9.5px] text-slate-400 block font-sans mt-0.5">
+                  Area: ${currentSignal.entryZoneLow?.toFixed(2)} - ${currentSignal.entryZoneHigh?.toFixed(2)}
                 </span>
               </div>
 

@@ -28,6 +28,8 @@ interface SignalsListViewProps {
 export const SignalsListView: React.FC<SignalsListViewProps> = ({
   signalsList,
   onSelectSignal,
+  onRefreshScan,
+  isScanning = false,
   isSubscriptionActive = true,
   onOpenPaywall,
 }) => {
@@ -159,10 +161,25 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
           </p>
         </div>
 
-        {/* Real-time Radar Status Indicator */}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-bold shadow-sm">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-          <span>Radar Live Aktif</span>
+        {/* Actions & Radar Indicator */}
+        <div className="flex items-center gap-2">
+          {onRefreshScan && (
+            <button
+              onClick={onRefreshScan}
+              disabled={isScanning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+              title="Hitung Ulang Sinyal & Riwayat dari Awal Data Candle"
+            >
+              <Zap className={`w-3.5 h-3.5 ${isScanning ? "animate-spin text-amber-400" : "text-cyan-400"}`} />
+              <span className="hidden sm:inline">{isScanning ? "Menghitung..." : "Sinkron TradingView"}</span>
+            </button>
+          )}
+
+          {/* Real-time Radar Status Indicator */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-bold shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>Radar Live Aktif</span>
+          </div>
         </div>
       </div>
 

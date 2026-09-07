@@ -60,6 +60,11 @@ export function generateInstantSignal(
       tfStrategyName = "Ultra-Fast Micro Scalp (M1)";
       baseSlUsd = 1.8;
       break;
+    case "M3":
+      tfMultiplier = 0.8;
+      tfStrategyName = "3-Minute Momentum & Scalp (M3)";
+      baseSlUsd = 2.4;
+      break;
     case "M5":
       tfMultiplier = 1.0;
       tfStrategyName = "M5 Momentum & SMC Flow";
