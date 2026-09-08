@@ -13,6 +13,40 @@ export interface StreamStats {
 
 type TickListener = (tick: Tick, stats: StreamStats) => void;
 
+const LAST_KNOWN_TICK_KEY = "lfx_last_known_gold_tick";
+
+function getInitialLatestTick(): Tick {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const saved = localStorage.getItem(LAST_KNOWN_TICK_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.price === "number" && parsed.price > 3500 && parsed.price < 4800) {
+          return {
+            ...parsed,
+            time: Date.now(),
+            isVerifiedLive: false,
+          };
+        }
+      }
+    }
+  } catch (e) {}
+
+  return {
+    price: 4414.02,
+    bid: 4413.94,
+    ask: 4414.10,
+    spread: 1.6,
+    time: Date.now(),
+    volume: 12480,
+    change: 18.25,
+    changePercent: 0.41,
+    high24h: 4425.8,
+    low24h: 4398.1,
+    isVerifiedLive: false,
+  };
+}
+
 class RealtimeMarketManager {
   private ws: WebSocket | null = null;
   private eventSource: EventSource | null = null;
@@ -28,18 +62,7 @@ class RealtimeMarketManager {
     isConnected: true,
   };
 
-  private latestTick: Tick = {
-    price: 4500.2,
-    bid: 4500.04,
-    ask: 4500.36,
-    spread: 1.6,
-    time: Date.now(),
-    volume: 12480,
-    change: 18.25,
-    changePercent: 0.41,
-    high24h: 4514.8,
-    low24h: 4478.1,
-  };
+  private latestTick: Tick = getInitialLatestTick();
 
   private isStarted = false;
   private reconnectTimeout: any = null;
@@ -104,7 +127,14 @@ class RealtimeMarketManager {
               changePercent: data.changePercent || 0,
               high24h: data.high24h || Number((data.price + 14).toFixed(2)),
               low24h: data.low24h || Number((data.price - 14).toFixed(2)),
+              isVerifiedLive: true,
             };
+
+            try {
+              if (typeof window !== "undefined" && window.localStorage) {
+                localStorage.setItem(LAST_KNOWN_TICK_KEY, JSON.stringify(this.latestTick));
+              }
+            } catch (e) {}
 
             this.emitTick();
           }
@@ -146,7 +176,15 @@ class RealtimeMarketManager {
               changePercent: data.changePercent || this.latestTick.changePercent,
               high24h: data.high24h || this.latestTick.high24h,
               low24h: data.low24h || this.latestTick.low24h,
+              isVerifiedLive: true,
             };
+
+            try {
+              if (typeof window !== "undefined" && window.localStorage) {
+                localStorage.setItem(LAST_KNOWN_TICK_KEY, JSON.stringify(this.latestTick));
+              }
+            } catch (e) {}
+
             this.emitTick();
           }
         }

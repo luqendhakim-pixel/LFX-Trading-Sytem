@@ -510,7 +510,7 @@ export const TSSChartRenderer: React.FC<TSSChartRendererProps> = ({
           ctx.font = `bold ${isMobile ? "8px" : "9px"} ui-sans-serif, system-ui, sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText("BUY Long", x, y + (isMobile ? 10 : 12));
+          ctx.fillText("BUY", x, y + (isMobile ? 10 : 12));
         }
 
         if (bar.bearSignal) {
@@ -526,7 +526,7 @@ export const TSSChartRenderer: React.FC<TSSChartRendererProps> = ({
           ctx.fill();
 
           // Pill Badge
-          const pillW = isMobile ? 44 : 52;
+          const pillW = isMobile ? 38 : 46;
           const pillH = isMobile ? 14 : 16;
           ctx.fillStyle = "#FF334B";
           ctx.fillRect(x - pillW / 2, y - (isMobile ? 17 : 20), pillW, pillH);
@@ -535,7 +535,7 @@ export const TSSChartRenderer: React.FC<TSSChartRendererProps> = ({
           ctx.font = `bold ${isMobile ? "8px" : "9px"} ui-sans-serif, system-ui, sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText("SELL Short", x, y - (isMobile ? 10 : 12));
+          ctx.fillText("SELL", x, y - (isMobile ? 10 : 12));
         }
       });
     }

@@ -197,7 +197,7 @@ class NotificationService {
     } catch (e) {}
   }
 
-  // Request browser push permission
+  // Request browser push permission and subscribe to server Web Push
   async requestPermission(): Promise<boolean> {
     if (typeof window === "undefined" || !("Notification" in window)) {
       return false;
@@ -205,9 +205,58 @@ class NotificationService {
 
     try {
       const permission = await Notification.requestPermission();
-      return permission === "granted";
+      if (permission === "granted") {
+        await this.registerWebPushSubscription();
+        return true;
+      }
+      return false;
     } catch (e) {
       console.warn("Permission request error:", e);
+      return false;
+    }
+  }
+
+  // Register push manager subscription to backend server so alerts work 24/7 even when phone app is closed
+  async registerWebPushSubscription(): Promise<boolean> {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return false;
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      if (!registration.pushManager) return false;
+
+      // Fetch VAPID public key from backend
+      const res = await fetch("/api/push/vapid-key");
+      if (!res.ok) return false;
+      const data = await res.json();
+      const vapidPublicKey = data.publicKey;
+      if (!vapidPublicKey) return false;
+
+      // Convert base64 VAPID key to Uint8Array
+      const padding = "=".repeat((4 - (vapidPublicKey.length % 4)) % 4);
+      const base64 = (vapidPublicKey + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+
+      // Subscribe to PushManager
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: outputArray,
+      });
+
+      // Send subscription object to server
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription),
+      });
+
+      console.log("[NotificationService] Web Push successfully registered with server.");
+      return true;
+    } catch (err) {
+      console.warn("[NotificationService] Web Push subscription note:", err);
       return false;
     }
   }

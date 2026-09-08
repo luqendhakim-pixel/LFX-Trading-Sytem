@@ -20,6 +20,7 @@ export interface Tick {
   changePercent: number;
   high24h: number;
   low24h: number;
+  isVerifiedLive?: boolean;
 }
 
 export interface TradeJournalData {

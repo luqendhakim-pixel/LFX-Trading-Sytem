@@ -129,7 +129,7 @@ export const TRADING_KNOWLEDGE_BASE = {
  * Builds a comprehensive structured system prompt for Gemini AI
  */
 export function buildTradingExpertSystemPrompt(ctx: TradingContext): string {
-  const currentPrice = ctx.currentPrice || 4500.0;
+  const currentPrice = ctx.currentPrice || 4413.50;
   const balance = ctx.balance || 10000;
   const riskPercent = ctx.riskPerTradePercent || 1;
   const maxRiskUsd = (balance * riskPercent) / 100;
@@ -186,7 +186,7 @@ export function buildTradingExpertSystemPrompt(ctx: TradingContext): string {
  */
 export function generateFallbackExpertResponse(query: string, ctx: TradingContext): string {
   const q = (query || "").toLowerCase();
-  const currentPrice = ctx.currentPrice || 4500.0;
+  const currentPrice = ctx.currentPrice || 4413.50;
   const balance = ctx.balance || 10000;
   const riskPercent = ctx.riskPerTradePercent || 1;
   const maxRiskUsd = (balance * riskPercent) / 100;

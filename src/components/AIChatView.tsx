@@ -30,7 +30,7 @@ interface ChatMessage {
   time: string;
 }
 
-export const AIChatView: React.FC<AIChatViewProps> = ({ currentSignal, currentPrice = 4500.0, onSelectSignal }) => {
+export const AIChatView: React.FC<AIChatViewProps> = ({ currentSignal, currentPrice = 4413.50, onSelectSignal }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "1",
@@ -101,7 +101,7 @@ Silakan pilih topik cepat di bawah atau ajukan pertanyaan spesifik Anda:`,
           message: userMsg.text,
           chatHistory: historyPayload,
           marketContext: {
-            currentPrice: currentPrice || 4500.0,
+            currentPrice: currentPrice || 4413.50,
             symbol: "XAUUSD",
             trend: currentSignal?.trendDirection || "BULLISH",
             timeframe: currentSignal?.timeframe || "M15",
@@ -144,7 +144,7 @@ Silakan pilih topik cepat di bawah atau ajukan pertanyaan spesifik Anda:`,
           id: (Date.now() + 1).toString(),
           sender: "ai",
           text: `## 📊 Analisis Cepat XAU/USD (Spot Gold)
-Harga emas saat ini berada di **$${(currentPrice || 4500).toFixed(2)}**.
+Harga emas saat ini berada di **$${(currentPrice || 4413.50).toFixed(2)}**.
 - **Aturan Baku SL**: Stop Loss terkunci wajib **50 pips ($5.00)** dari titik entry.
 - **SOP Breakeven**: Pindahkan SL ke titik entry (+0) begitu harga menyentuh **TP1 (+50 pips)**.
 - **Manajemen Modal**: Batasi risiko maksimal 1% per trade dan jangan gunakan martingale.`,

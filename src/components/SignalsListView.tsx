@@ -23,6 +23,7 @@ interface SignalsListViewProps {
   isScanning?: boolean;
   isSubscriptionActive?: boolean;
   onOpenPaywall?: () => void;
+  currentPrice?: number;
 }
 
 export const SignalsListView: React.FC<SignalsListViewProps> = ({
@@ -32,6 +33,7 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
   isScanning = false,
   isSubscriptionActive = true,
   onOpenPaywall,
+  currentPrice,
 }) => {
   const [filterType, setFilterType] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -50,28 +52,39 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
     const status = sig.signalStatus || (isLive ? "ACTIVE" : "CLOSED");
 
     if (isLive) {
-      if (status === "BE SET (+30p)") {
+      const isBuy = sig.signalType.includes("BUY");
+      const livePrice = currentPrice && currentPrice > 0 ? currentPrice : sig.entryPrice;
+      const diff = isBuy ? livePrice - sig.entryPrice : sig.entryPrice - livePrice;
+      const livePips = Math.round(diff * 10);
+
+      if (livePips >= 200 || (isBuy ? livePrice >= sig.takeProfit4 : livePrice <= sig.takeProfit4) || status === "TP4 HIT") {
         return {
-          label: "🛡️ BE AKTIF (+30p)",
-          className: "bg-cyan-500/25 text-cyan-300 border-cyan-400/60 animate-pulse font-black",
+          label: "🏆 TP4 HIT MAX (+200p)",
+          className: "bg-emerald-500/30 text-emerald-200 border-emerald-400 font-black shadow-md shadow-emerald-500/20",
         };
       }
-      if (status === "TP1 HIT") {
+      if (livePips >= 150 || (isBuy ? livePrice >= sig.takeProfit3 : livePrice <= sig.takeProfit3) || status === "TP3 HIT") {
         return {
-          label: "🎯 TP1 HIT · RUNNING",
-          className: "bg-emerald-500/25 text-emerald-300 border-emerald-500/60 font-black",
+          label: "🎯 TP3 HIT · RUNNING",
+          className: "bg-cyan-500/25 text-cyan-300 border-cyan-500/60 font-black",
         };
       }
-      if (status === "TP2 HIT") {
+      if (livePips >= 100 || (isBuy ? livePrice >= sig.takeProfit2 : livePrice <= sig.takeProfit2) || status === "TP2 HIT") {
         return {
           label: "🎯 TP2 HIT · RUNNING",
           className: "bg-teal-500/25 text-teal-300 border-teal-500/60 font-black",
         };
       }
-      if (status === "TP3 HIT") {
+      if (livePips >= 50 || (isBuy ? livePrice >= sig.takeProfit1 : livePrice <= sig.takeProfit1) || status === "TP1 HIT") {
         return {
-          label: "🎯 TP3 HIT · RUNNING",
-          className: "bg-cyan-500/25 text-cyan-300 border-cyan-500/60 font-black",
+          label: "🎯 TP1 HIT · RUNNING",
+          className: "bg-emerald-500/25 text-emerald-300 border-emerald-500/60 font-black",
+        };
+      }
+      if (livePips >= 30 || sig.isBreakevenSet || status === "BE SET (+30p)") {
+        return {
+          label: "🛡️ BE AKTIF (+30p)",
+          className: "bg-cyan-500/25 text-cyan-300 border-cyan-400/60 animate-pulse font-black",
         };
       }
       return {
@@ -124,14 +137,29 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
   // Find the single current active signal (if any)
   const activeSignal = signalsList.find((s) => s.status === "ACTIVE");
 
+  const seenLive = new Set<string>();
   const filteredSignals = signalsList.filter((sig) => {
     const isLive = sig.status === "ACTIVE";
     const status = sig.signalStatus || (isLive ? "ACTIVE" : "CLOSED");
 
-    if (filterType === "ACTIVE" && !isLive) return false;
-    if (filterType === "TP_WIN" && !status.includes("TP")) return false;
-    if (filterType === "SL_HIT" && status !== "SL HIT") return false;
-    if (filterType === "HIT_BE" && status !== "BREAK EVEN") return false;
+    if (filterType === "ACTIVE") {
+      if (!isLive) return false;
+      // Pastikan hanya 1 kartu sinyal aktif (Live Running) yang tampil
+      if (seenLive.size > 0) return false;
+      seenLive.add(sig.id);
+    }
+    if (filterType === "TP_WIN") {
+      const isWin = status.includes("TP") || sig.closeResult === "WIN" || (typeof sig.realizedPips === "number" && sig.realizedPips > 0);
+      if (!isWin) return false;
+    }
+    if (filterType === "SL_HIT") {
+      const isLoss = status === "SL HIT" || sig.closeResult === "LOSS" || (typeof sig.realizedPips === "number" && sig.realizedPips < 0);
+      if (!isLoss) return false;
+    }
+    if (filterType === "HIT_BE") {
+      const isBe = status === "BREAK EVEN" || status === "BE SET (+30p)" || sig.closeResult === "BE" || sig.isBreakevenSet;
+      if (!isBe) return false;
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -276,32 +304,63 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
             </div>
 
             {/* Price Targets Grid */}
-            <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-slate-800/80 text-center font-mono">
-              <div className="p-1.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                <div className="text-[10px] text-rose-400 font-bold">SL (50p)</div>
-                <div className="text-xs font-bold text-slate-200 mt-0.5">
-                  {!isSubscriptionActive ? "••••" : (activeSignal.isBreakevenSet ? `BE (${activeSignal.entryPrice.toFixed(1)})` : activeSignal.stopLoss.toFixed(2))}
+            {(() => {
+              const isBuy = activeSignal.signalType.includes("BUY");
+              const livePrice = currentPrice && currentPrice > 0 ? currentPrice : activeSignal.entryPrice;
+              const diff = isBuy ? livePrice - activeSignal.entryPrice : activeSignal.entryPrice - livePrice;
+              const livePips = Math.round(diff * 10);
+
+              const hitTp4 = livePips >= 200 || (isBuy ? livePrice >= activeSignal.takeProfit4 : livePrice <= activeSignal.takeProfit4) || activeSignal.signalStatus === "TP4 HIT";
+              const hitTp3 = hitTp4 || livePips >= 150 || (isBuy ? livePrice >= activeSignal.takeProfit3 : livePrice <= activeSignal.takeProfit3) || activeSignal.signalStatus === "TP3 HIT";
+              const hitTp2 = hitTp3 || livePips >= 100 || (isBuy ? livePrice >= activeSignal.takeProfit2 : livePrice <= activeSignal.takeProfit2) || activeSignal.signalStatus === "TP2 HIT";
+              const hitTp1 = hitTp2 || livePips >= 50 || (isBuy ? livePrice >= activeSignal.takeProfit1 : livePrice <= activeSignal.takeProfit1) || activeSignal.signalStatus === "TP1 HIT";
+              const isBe = hitTp1 || livePips >= 30 || activeSignal.isBreakevenSet || activeSignal.signalStatus === "BE SET (+30p)";
+
+              return (
+                <div className="grid grid-cols-5 gap-1.5 mt-3 pt-3 border-t border-slate-800/80 text-center font-mono">
+                  <div className={`p-1.5 rounded-xl border ${isBe ? "bg-cyan-950/40 border-cyan-500/40" : "bg-slate-900/80 border-slate-800"}`}>
+                    <div className={`text-[9.5px] font-bold ${isBe ? "text-cyan-300" : "text-rose-400"}`}>
+                      {isBe ? "BE LOCK" : "SL (50p)"}
+                    </div>
+                    <div className="text-[11px] sm:text-xs font-bold text-slate-200 mt-0.5 truncate">
+                      {!isSubscriptionActive ? "••••" : (isBe ? activeSignal.entryPrice.toFixed(1) : activeSignal.stopLoss.toFixed(1))}
+                    </div>
+                  </div>
+                  <div className={`p-1.5 rounded-xl border ${hitTp1 ? "bg-emerald-950/60 border-emerald-500/50" : "bg-slate-900/80 border-slate-800"}`}>
+                    <div className="text-[9.5px] text-emerald-400 font-bold">
+                      TP1 {hitTp1 ? "✓" : "+50p"}
+                    </div>
+                    <div className={`text-[11px] sm:text-xs font-bold mt-0.5 truncate ${hitTp1 ? "text-emerald-300 font-black" : "text-slate-200"}`}>
+                      {!isSubscriptionActive ? "••••" : activeSignal.takeProfit1.toFixed(1)}
+                    </div>
+                  </div>
+                  <div className={`p-1.5 rounded-xl border ${hitTp2 ? "bg-teal-950/60 border-teal-500/50" : "bg-slate-900/80 border-slate-800"}`}>
+                    <div className="text-[9.5px] text-teal-400 font-bold">
+                      TP2 {hitTp2 ? "✓" : "+100p"}
+                    </div>
+                    <div className={`text-[11px] sm:text-xs font-bold mt-0.5 truncate ${hitTp2 ? "text-teal-300 font-black" : "text-slate-200"}`}>
+                      {!isSubscriptionActive ? "••••" : activeSignal.takeProfit2.toFixed(1)}
+                    </div>
+                  </div>
+                  <div className={`p-1.5 rounded-xl border ${hitTp3 ? "bg-cyan-950/60 border-cyan-500/50" : "bg-slate-900/80 border-slate-800"}`}>
+                    <div className="text-[9.5px] text-cyan-400 font-bold">
+                      TP3 {hitTp3 ? "✓" : "+150p"}
+                    </div>
+                    <div className={`text-[11px] sm:text-xs font-bold mt-0.5 truncate ${hitTp3 ? "text-cyan-300 font-black" : "text-slate-200"}`}>
+                      {!isSubscriptionActive ? "••••" : activeSignal.takeProfit3.toFixed(1)}
+                    </div>
+                  </div>
+                  <div className={`p-1.5 rounded-xl border ${hitTp4 ? "bg-gradient-to-r from-emerald-950/90 to-teal-950/90 border-emerald-400 shadow-md shadow-emerald-500/20" : "bg-slate-900/80 border-slate-800"}`}>
+                    <div className={`text-[9.5px] font-bold ${hitTp4 ? "text-emerald-300 font-black" : "text-emerald-400"}`}>
+                      TP4 {hitTp4 ? "🏆 MAX" : "+200p"}
+                    </div>
+                    <div className={`text-[11px] sm:text-xs font-bold mt-0.5 truncate ${hitTp4 ? "text-emerald-200 font-black" : "text-slate-200"}`}>
+                      {!isSubscriptionActive ? "••••" : (activeSignal.takeProfit4?.toFixed(1) || "-")}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="p-1.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                <div className="text-[10px] text-emerald-400 font-bold">TP1 (+50p)</div>
-                <div className="text-xs font-bold text-slate-200 mt-0.5">
-                  {!isSubscriptionActive ? "••••" : activeSignal.takeProfit1.toFixed(2)}
-                </div>
-              </div>
-              <div className="p-1.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                <div className="text-[10px] text-teal-400 font-bold">TP2 (+100p)</div>
-                <div className="text-xs font-bold text-slate-200 mt-0.5">
-                  {!isSubscriptionActive ? "••••" : activeSignal.takeProfit2.toFixed(2)}
-                </div>
-              </div>
-              <div className="p-1.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                <div className="text-[10px] text-cyan-400 font-bold">TP3 (+150p)</div>
-                <div className="text-xs font-bold text-slate-200 mt-0.5">
-                  {!isSubscriptionActive ? "••••" : activeSignal.takeProfit3.toFixed(2)}
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             <div className="mt-3 flex items-center justify-between text-[11px] text-cyan-300 font-bold pt-1">
               <span>Buka Visual Chart & Trajectory Sinyal →</span>

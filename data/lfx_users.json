@@ -1,0 +1,26 @@
+[
+  {
+    "id": "USR-ADMIN-01",
+    "name": "LuqendIbnuHakim",
+    "identifier": "luqendhakim@gmail.com",
+    "password": "admin123",
+    "authMethod": "EMAIL",
+    "role": "ADMIN",
+    "registeredAt": 1788431033245,
+    "trialEndsAt": 1789035833245,
+    "subscriptionEndsAt": 1820399033245,
+    "status": "ADMIN"
+  },
+  {
+    "id": "USR-ADMIN-02",
+    "name": "LuqendIbnuHakim",
+    "identifier": "08123456789",
+    "password": "admin123",
+    "authMethod": "WHATSAPP",
+    "role": "ADMIN",
+    "registeredAt": 1788431033245,
+    "trialEndsAt": 1789035833245,
+    "subscriptionEndsAt": 1820399033245,
+    "status": "ADMIN"
+  }
+]

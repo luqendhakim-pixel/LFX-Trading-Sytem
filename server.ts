@@ -662,16 +662,18 @@ interface LiveMarketState {
   source: string;
 }
 
+let hasReceivedLivePrice = false;
+
 let cachedGoldState: LiveMarketState = {
   symbol: "XAU/USD",
-  price: 4500.2,
-  bid: 4500.04,
-  ask: 4500.36,
+  price: 4414.02,
+  bid: 4413.94,
+  ask: 4414.10,
   spread: 1.6,
   change: 18.25,
   changePercent: 0.41,
-  high24h: 4514.8,
-  low24h: 4478.1,
+  high24h: 4425.8,
+  low24h: 4398.1,
   volume: 12480,
   lastUpdated: Date.now(),
   source: "Exness MT5 Real-time Bridge (OANDA Spot)",
@@ -718,6 +720,7 @@ async function fetchLiveGoldPriceFromMarket(): Promise<number | null> {
           source: "Exness-MT5 Forex Spot (OANDA XAU/USD)",
         };
 
+        hasReceivedLivePrice = true;
         return mid;
       }
     }
@@ -756,6 +759,7 @@ async function fetchLiveGoldPriceFromMarket(): Promise<number | null> {
           lastUpdated: Date.now(),
           source: "Spot Gold XAU/USD Feed",
         };
+        hasReceivedLivePrice = true;
         return mid;
       }
     }
@@ -768,13 +772,14 @@ async function fetchLiveGoldPriceFromMarket(): Promise<number | null> {
 setInterval(async () => {
   const price = await fetchLiveGoldPriceFromMarket();
   if (price && price > 0) {
+    hasReceivedLivePrice = true;
     signalEngineServer.onPriceTick(price);
   }
 }, 1000);
 
 // Sub-second precision tick updater (anchored directly to cached market price, no runaway drift)
 setInterval(() => {
-  if (cachedGoldState.price > 0) {
+  if (hasReceivedLivePrice && cachedGoldState.price > 0) {
     const halfSpread = (cachedGoldState.spread * 0.1) / 2 || 0.08;
     cachedGoldState.bid = Number((cachedGoldState.price - halfSpread).toFixed(2));
     cachedGoldState.ask = Number((cachedGoldState.price + halfSpread).toFixed(2));
@@ -789,6 +794,36 @@ fetchLiveGoldPriceFromMarket().then((price) => {
     signalEngineServer.onPriceTick(price);
   }
 });
+
+// Initial candle fetch and TradingView signal calculation on server start
+async function bootstrapTradingViewSignals() {
+  try {
+    const klinesRes = await fetch(
+      "https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=250"
+    );
+    if (klinesRes.ok) {
+      const rawKlines = await klinesRes.json();
+      if (Array.isArray(rawKlines) && rawKlines.length > 0) {
+        const spotPrice = (await fetchLiveGoldPriceFromMarket()) || cachedGoldState.price || 4397.6;
+        const lastRawClose = parseFloat(rawKlines[rawKlines.length - 1][4]);
+        const basisOffset = spotPrice - lastRawClose;
+        const candles = rawKlines.map((k: any) => ({
+          time: parseInt(k[0]),
+          open: Number((parseFloat(k[1]) + basisOffset).toFixed(2)),
+          high: Number((parseFloat(k[2]) + basisOffset).toFixed(2)),
+          low: Number((parseFloat(k[3]) + basisOffset).toFixed(2)),
+          close: Number((parseFloat(k[4]) + basisOffset).toFixed(2)),
+          volume: Math.round(parseFloat(k[5]) * 100) || 500,
+        }));
+        signalEngineServer.syncFromCandles(candles, spotPrice);
+        console.log(`[SignalEngineServer] Initialized from 250 real candles. Signals synced.`);
+      }
+    }
+  } catch (e) {
+    console.warn("[SignalEngineServer] Startup candle bootstrap failed:", e);
+  }
+}
+setTimeout(bootstrapTradingViewSignals, 1000);
 
 // ==========================================
 // 📅 REAL-TIME ECONOMIC NEWS CALENDAR API (XAU/USD RED FOLDER NEWS)
@@ -1220,7 +1255,7 @@ app.get("/api/market/gold/stream", (req, res) => {
 // Endpoint for historical & live OHLC candle data (fetches real spot gold klines)
 app.get("/api/market/gold/candles", async (req, res) => {
   const timeframe = (req.query.timeframe as string) || "M5";
-  const count = Math.min(150, parseInt(req.query.count as string) || 80);
+  const count = Math.min(300, parseInt(req.query.count as string) || 250);
 
   let binanceInterval = "5m";
   let stepMinutes = 5;
@@ -1293,6 +1328,11 @@ app.get("/api/market/gold/candles", async (req, res) => {
           cachedGoldState.price = spotPrice;
           cachedGoldState.bid = Number((spotPrice - 0.08).toFixed(2));
           cachedGoldState.ask = Number((spotPrice + 0.08).toFixed(2));
+
+          // Auto-sync server signal engine from real TradingView candle history
+          if (timeframe === "M5" && spotCalibratedCandles.length >= 20) {
+            signalEngineServer.syncFromCandles(spotCalibratedCandles, spotPrice);
+          }
         }
 
         return res.json({
@@ -1311,7 +1351,7 @@ app.get("/api/market/gold/candles", async (req, res) => {
   // Fallback realistic candle builder with natural market geometry
   const stepMs = stepMinutes * 60 * 1000;
   const now = Date.now();
-  const basePrice = cachedGoldState.price || 4500.2;
+  const basePrice = cachedGoldState.price || 4414.02;
   const volatility = stepMinutes <= 5 ? 1.4 : stepMinutes <= 60 ? 3.5 : 8.0;
 
   // Generate continuous candle deltas
@@ -1402,7 +1442,7 @@ app.post("/api/ai/analyze", async (req, res) => {
     } = req.body;
 
     // Fast Cache Check: Group price into ~0.4 USD buckets to avoid burning quota or excessive CPU
-    const priceBucket = Math.round(Number(currentPrice || 4500) * 2) / 2;
+    const priceBucket = Math.round(Number(currentPrice || 4414) * 2) / 2;
     const cacheKey = `${timeframe}_${priceBucket}_${strategy}_${riskPerTradePercent}`;
     const cached = aiAnalysisCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < AI_CACHE_TTL_MS) {
@@ -1636,7 +1676,7 @@ Candles: ${candles.slice(-8).map((c: any) => c.close).join(",")}`;
 // Live Fear & Greed Index + Market News Headlines for Gold (XAU/USD)
 app.get("/api/market/sentiment-news", async (req, res) => {
   try {
-    const currentPrice = cachedGoldState?.price || 4500.0;
+    const currentPrice = cachedGoldState?.price || 4413.50;
     const changePercent = cachedGoldState?.changePercent || 0.42;
 
     // Dynamic Fear & Greed Calculation for Gold
@@ -1786,7 +1826,7 @@ async function handleTradingCopilotChat(req: express.Request, res: express.Respo
     const marketContext = body.marketContext || body.context || {};
     const chatHistory = Array.isArray(body.chatHistory) ? body.chatHistory : [];
 
-    const currentPrice = Number(marketContext?.currentPrice || cachedGoldState?.price || 4500.0);
+    const currentPrice = Number(marketContext?.currentPrice || cachedGoldState?.price || 4413.50);
     const trend = marketContext?.trend || marketContext?.trendDirection || (marketContext?.signal?.trendDirection) || "BULLISH";
     const timeframe = marketContext?.timeframe || "M15";
     const balance = Number(marketContext?.balance || 10000);
@@ -1925,6 +1965,93 @@ async function handleTradingCopilotChat(req: express.Request, res: express.Respo
 // Mount handler on both endpoints for full compatibility
 app.post("/api/copilot/chat", handleTradingCopilotChat);
 app.post("/api/ai/chat", handleTradingCopilotChat);
+
+// ==========================================
+// 🚀 SERVER-SIDE PERSISTENT SIGNALS & WINRATE API
+// ==========================================
+// Always returns server-authoritative state so refreshing the page
+// NEVER creates duplicate signals or corrupts winrate calculations!
+app.get("/api/signals/state", (req, res) => {
+  try {
+    const state = signalEngineServer.getState();
+    res.json({
+      success: true,
+      data: state,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Sync authoritative TradingView strategy signal calculated from candle charts
+app.post("/api/signals/sync-tradingview", (req, res) => {
+  try {
+    const { currentSignal, signalsList } = req.body;
+    if (currentSignal) {
+      signalEngineServer.syncFromTradingViewEngine(currentSignal, signalsList);
+    }
+    res.json({ success: true, data: signalEngineServer.getState() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Update specific signal outcome (e.g. SL hit, TP hit, or BE triggered)
+app.post("/api/signals/update-signal", (req, res) => {
+  try {
+    const { signal } = req.body;
+    if (signal) {
+      signalEngineServer.updateSignal(signal);
+    }
+    res.json({ success: true, data: signalEngineServer.getState() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Reset signal state to official baseline (BUY @ 4391.54)
+app.post("/api/signals/reset-baseline", (req, res) => {
+  try {
+    signalEngineServer.forceResetToTradingViewBaseline();
+    res.json({ success: true, data: signalEngineServer.getState() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// VAPID Public key for Web Push notification registration
+app.get("/api/push/vapid-key", (req, res) => {
+  try {
+    const key = getVapidPublicKey();
+    res.json({ success: true, publicKey: key });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Register device push subscription (continues receiving signals when app is closed on mobile)
+app.post("/api/push/subscribe", (req, res) => {
+  try {
+    const subscription = req.body;
+    const added = addPushSubscription(subscription);
+    res.json({ success: added });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get recent server notifications log
+app.get("/api/signals/notifications", (req, res) => {
+  try {
+    const state = signalEngineServer.getState();
+    res.json({
+      success: true,
+      notifications: state.recentNotifications || [],
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 
 // Vite middleware or production static serving

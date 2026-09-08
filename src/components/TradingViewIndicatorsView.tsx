@@ -20,12 +20,12 @@ interface TradingViewIndicatorsViewProps {
 export const TradingViewIndicatorsView: React.FC<TradingViewIndicatorsViewProps> = ({
   timeframe = "H1",
   onTimeframeChange,
-  currentPrice = 4500.2,
+  currentPrice = 4413.50,
 }) => {
   const [selectedTf, setSelectedTf] = useState<Timeframe>(timeframe);
   const [activeSubTab, setActiveSubTab] = useState<"CHART" | "GAUGE" | "LEVELS">("CHART");
 
-  const baseP = currentPrice || 4500.0;
+  const baseP = currentPrice || 4413.50;
   const ema20Val = Number((baseP - 1.2).toFixed(2));
   const ema50Val = Number((baseP - 3.8).toFixed(2));
   const ema200Val = Number((baseP - 14.5).toFixed(2));

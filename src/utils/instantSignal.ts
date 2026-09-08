@@ -23,7 +23,7 @@ export function generateInstantSignal(
   riskSettings: RiskSettings,
   tssConfig: Partial<TrendStateConfig> = defaultTSSConfig
 ): AISignal {
-  const currentPrice = tick.price || 4500.0;
+  const currentPrice = tick.price || (candles.length > 0 ? candles[candles.length - 1].close : 4413.50);
   const closes = candles.map((c) => c.close);
   const ema20Arr = calculateEMA(closes, 20);
   const ema50Arr = calculateEMA(closes, 50);

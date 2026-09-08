@@ -139,8 +139,39 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
     return Math.round(diff * 10);
   }, [isLive, closedExit.pips, currentLivePrice, entry, isBuy]);
 
-  // Status mapping
-  const currentStatus = signal.signalStatus || (signal.status === "ACTIVE" ? "ACTIVE" : "SL HIT");
+  // True dynamic real-time target hit detection based on live price & floating pips
+  const isTp4Hit = isLive
+    ? (isBuy ? currentLivePrice >= tp4 : currentLivePrice <= tp4) || floatingPips >= 200 || signal.signalStatus === "TP4 HIT"
+    : (closedExit.outcome === "TP" && closedExit.pips >= 200) || signal.signalStatus === "TP4 HIT";
+
+  const isTp3Hit = isLive
+    ? isTp4Hit || (isBuy ? currentLivePrice >= tp3 : currentLivePrice <= tp3) || floatingPips >= 150 || signal.signalStatus === "TP3 HIT"
+    : isTp4Hit || (closedExit.outcome === "TP" && closedExit.pips >= 150) || signal.signalStatus === "TP3 HIT";
+
+  const isTp2Hit = isLive
+    ? isTp3Hit || (isBuy ? currentLivePrice >= tp2 : currentLivePrice <= tp2) || floatingPips >= 100 || signal.signalStatus === "TP2 HIT"
+    : isTp3Hit || (closedExit.outcome === "TP" && closedExit.pips >= 100) || signal.signalStatus === "TP2 HIT";
+
+  const isTp1Hit = isLive
+    ? isTp2Hit || (isBuy ? currentLivePrice >= tp1 : currentLivePrice <= tp1) || floatingPips >= 50 || signal.signalStatus === "TP1 HIT"
+    : isTp2Hit || (closedExit.outcome === "TP" && closedExit.pips >= 50) || signal.signalStatus === "TP1 HIT";
+
+  const isBeSet = isLive
+    ? isTp1Hit || floatingPips >= 30 || !!signal.isBreakevenSet || signal.signalStatus === "BE SET (+30p)"
+    : closedExit.outcome === "BE" || !!signal.isBreakevenSet;
+
+  // Real-time dynamic status mapping
+  const currentStatus = useMemo(() => {
+    if (isLive) {
+      if (isTp4Hit) return "TP4 HIT";
+      if (isTp3Hit) return "TP3 HIT";
+      if (isTp2Hit) return "TP2 HIT";
+      if (isTp1Hit) return "TP1 HIT";
+      if (isBeSet) return "BE SET (+30p)";
+      return signal.signalStatus || "ACTIVE";
+    }
+    return signal.signalStatus || (signal.status === "ACTIVE" ? "ACTIVE" : "SL HIT");
+  }, [isLive, isTp4Hit, isTp3Hit, isTp2Hit, isTp1Hit, isBeSet, signal.signalStatus, signal.status]);
 
   const getStatusBadge = (status: string) => {
     if (isLive) {
@@ -154,7 +185,7 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
         case "TP3 HIT":
           return "bg-cyan-500/25 text-cyan-300 border-cyan-500/60 font-black";
         case "TP4 HIT":
-          return "bg-emerald-500/40 text-emerald-200 border-emerald-400/80 font-black";
+          return "bg-gradient-to-r from-emerald-500/40 via-teal-500/40 to-emerald-500/40 text-emerald-200 border-emerald-400 font-black shadow-lg shadow-emerald-500/20";
         default:
           return "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 animate-pulse font-black";
       }
@@ -183,10 +214,10 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
   const getStatusLabel = (status: string) => {
     if (isLive) {
       if (status === "BE SET (+30p)") return "BE AKTIF (+30p)";
-      if (status === "TP1 HIT") return "TP1 HIT · RUNNING (BE)";
-      if (status === "TP2 HIT") return "TP2 HIT · RUNNING";
-      if (status === "TP3 HIT") return "TP3 HIT · RUNNING";
-      if (status === "TP4 HIT") return "TP4 HIT · RUNNING";
+      if (status === "TP1 HIT") return "🎯 TP1 HIT (+50p)";
+      if (status === "TP2 HIT") return "🎯 TP2 HIT (+100p)";
+      if (status === "TP3 HIT") return "🎯 TP3 HIT (+150p)";
+      if (status === "TP4 HIT") return "🏆 TP4 HIT MAX (+200p)";
       return "LIVE RUNNING";
     }
 
@@ -194,7 +225,7 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
     if (status === "TP1 HIT") return "TP1 WIN (+50p)";
     if (status === "TP2 HIT") return "TP2 WIN (+100p)";
     if (status === "TP3 HIT") return "TP3 WIN (+150p)";
-    if (status === "TP4 HIT") return "TP4 WIN (+200p)";
+    if (status === "TP4 HIT") return "TP4 MAX WIN (+200p)";
     if (status === "BREAK EVEN") return "HIT BE · CLOSED (0p)";
     if (status === "SL HIT") return "SL HIT · CLOSED";
     return `CLOSED (${closedExit.label})`;
@@ -376,20 +407,26 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
         </div>
 
         {/* Real-time Status & Execution Explanation Notice */}
-        {(currentStatus.includes("TP") || currentStatus === "BE SET (+30p)" || signal.isBreakevenSet || currentStatus === "BREAK EVEN" || currentStatus === "SL HIT" || !isLive) && (
-          <div className="p-3 rounded-2xl bg-gradient-to-r from-cyan-950/60 via-slate-900 to-emerald-950/60 border border-cyan-500/40 text-xs">
-            <div className="flex items-center gap-1.5 text-cyan-300 font-extrabold mb-1">
-              <span className={`w-2 h-2 rounded-full ${isLive ? "bg-cyan-400 animate-ping" : "bg-emerald-400"}`} />
-              <span>
+        {(isTp4Hit || isTp3Hit || isTp2Hit || isTp1Hit || isBeSet || currentStatus.includes("TP") || currentStatus === "BE SET (+30p)" || signal.isBreakevenSet || currentStatus === "BREAK EVEN" || currentStatus === "SL HIT" || !isLive) && (
+          <div className={`p-3.5 rounded-2xl border text-xs shadow-lg transition-all ${
+            isTp4Hit
+              ? "bg-gradient-to-r from-emerald-950/90 via-slate-900 to-teal-950/90 border-emerald-400/80 shadow-emerald-500/20"
+              : "bg-gradient-to-r from-cyan-950/60 via-slate-900 to-emerald-950/60 border-cyan-500/40"
+          }`}>
+            <div className="flex items-center gap-1.5 font-extrabold mb-1">
+              <span className={`w-2.5 h-2.5 rounded-full ${isTp4Hit ? "bg-emerald-400 animate-pulse" : isLive ? "bg-cyan-400 animate-ping" : "bg-emerald-400"}`} />
+              <span className={isTp4Hit ? "text-emerald-300 tracking-wide font-black" : "text-cyan-300"}>
                 {isLive
-                  ? currentStatus === "BE SET (+30p)"
+                  ? isTp4Hit
+                    ? "🏆 TARGET MAKSIMAL TERCAPAI: TP4 HIT (+200 PIPS)"
+                    : isTp3Hit
+                    ? "🎯 TARGET 3 TERCAPAI: TP3 HIT (+150 PIPS) · RUNNING"
+                    : isTp2Hit
+                    ? "🎯 TARGET 2 TERCAPAI: TP2 HIT (+100 PIPS) · RUNNING"
+                    : isTp1Hit
+                    ? "🎯 TARGET 1 TERCAPAI: TP1 HIT (+50 PIPS) · RUNNING (BE)"
+                    : isBeSet
                     ? "🛡️ POSISI LIVE: SUDAH PASANG BE (+30 PIPS)"
-                    : currentStatus === "TP1 HIT"
-                    ? "🎯 POSISI LIVE: TP1 HIT (+50 PIPS) · RUNNING"
-                    : currentStatus === "TP2 HIT"
-                    ? "🎯 POSISI LIVE: TP2 HIT (+100 PIPS) · RUNNING"
-                    : currentStatus === "TP3 HIT"
-                    ? "🎯 POSISI LIVE: TP3 HIT (+150 PIPS) · RUNNING"
                     : "⚡ POSISI LIVE SEDANG BERJALAN"
                   : closedExit.outcome === "TP"
                   ? `🏆 RIWAYAT: WIN TARGET TERCAPAI (${closedExit.label})`
@@ -400,10 +437,16 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
               {isLive
-                ? currentStatus === "BE SET (+30p)"
-                  ? `Floating profit sudah +30 pips. Stop Loss otomatis dikunci di Entry ($${entry.toFixed(2)}) untuk posisi zero-risk!`
-                  : currentStatus === "TP1 HIT"
+                ? isTp4Hit
+                  ? `Harga live XAU/USD ($${currentLivePrice.toFixed(2)}) telah menembus target maksimal TP4 ($${tp4.toFixed(2)}). Posisi resmi mengamankan profit maksimal +200 pips!`
+                  : isTp3Hit
+                  ? `Target 3 tercapai (+150 pips). Stop Loss terkunci di Entry ($${entry.toFixed(2)}) zero-risk, target akhir TP4 ($${tp4.toFixed(2)}).`
+                  : isTp2Hit
+                  ? `Target 2 tercapai (+100 pips). Amankan sebagian lot, sisa posisi running aman dengan Stop Loss di Entry.`
+                  : isTp1Hit
                   ? `Target 1 tercapai (+50 pips). Amankan profit 50% lot, sisa lot dibiarkan running menuju TP2/3/4 dengan Stop Loss di Entry (BE).`
+                  : isBeSet
+                  ? `Floating profit sudah +30 pips. Stop Loss otomatis dikunci di Entry ($${entry.toFixed(2)}) untuk posisi zero-risk!`
                   : `Posisi sedang aktif berjalan di pasar live XAU/USD. Terus pantau level Target dan Stop Loss.`
                 : closedExit.outcome === "TP"
                 ? `Posisi telah sukses ditutup di target ${closedExit.label} pada harga $${closedExit.price.toFixed(2)}. Grafik riwayat terkunci statis pada hasil akhir.`
@@ -436,7 +479,7 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
               STOP LOSS
             </div>
             <div className="text-lg sm:text-xl font-black text-rose-500 tracking-tight">
-              {sl.toFixed(3)}
+              {isBeSet ? `BE (${entry.toFixed(2)})` : sl.toFixed(3)}
             </div>
           </div>
 
@@ -472,82 +515,98 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
         <div className="pt-2 border-t border-slate-800/60 space-y-2 font-mono text-xs sm:text-sm">
           {/* TP1 */}
           <div
-            className={`flex items-center justify-between py-1 px-2 rounded-lg transition ${
-              currentStatus === "TP1 HIT" || currentStatus === "TP2 HIT" || currentStatus === "TP3 HIT" || currentStatus === "TP4 HIT"
-                ? "bg-emerald-950/40 border border-emerald-500/40 text-emerald-300"
-                : "text-slate-300"
+            className={`flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all ${
+              isTp1Hit
+                ? "bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 shadow-sm"
+                : "text-slate-300 bg-slate-900/40 border border-transparent"
             }`}
           >
-            <span className="font-semibold flex items-center gap-1.5">
-              {(currentStatus === "TP1 HIT" || currentStatus === "TP2 HIT" || currentStatus === "TP3 HIT" || currentStatus === "TP4 HIT") && (
-                <span className="text-[10px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.2 rounded">
+            <span className="font-semibold flex items-center gap-2">
+              {isTp1Hit ? (
+                <span className="text-[10px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.5 rounded shadow-sm">
                   HIT ✓
                 </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-slate-600" />
               )}
               <span className="text-slate-400">TP1 ·</span>{" "}
               <span className="text-slate-100 font-bold">{tp1.toFixed(3)}</span>
             </span>
-            <span className="font-black text-emerald-400">+50 pips</span>
+            <span className={`font-black ${isTp1Hit ? "text-emerald-400 font-mono" : "text-emerald-500/80"}`}>
+              +50 pips {isTp1Hit ? "✓" : ""}
+            </span>
           </div>
 
           {/* TP2 */}
           <div
-            className={`flex items-center justify-between py-1 px-2 rounded-lg transition ${
-              currentStatus === "TP2 HIT" || currentStatus === "TP3 HIT" || currentStatus === "TP4 HIT"
-                ? "bg-emerald-950/40 border border-emerald-500/40 text-emerald-300"
-                : "text-slate-300"
+            className={`flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all ${
+              isTp2Hit
+                ? "bg-teal-950/60 border border-teal-500/50 text-teal-300 shadow-sm"
+                : "text-slate-300 bg-slate-900/40 border border-transparent"
             }`}
           >
-            <span className="font-semibold flex items-center gap-1.5">
-              {(currentStatus === "TP2 HIT" || currentStatus === "TP3 HIT" || currentStatus === "TP4 HIT") && (
-                <span className="text-[10px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.2 rounded">
+            <span className="font-semibold flex items-center gap-2">
+              {isTp2Hit ? (
+                <span className="text-[10px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.5 rounded shadow-sm">
                   HIT ✓
                 </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-slate-600" />
               )}
               <span className="text-slate-400">TP2 ·</span>{" "}
               <span className="text-slate-100 font-bold">{tp2.toFixed(3)}</span>
             </span>
-            <span className="font-black text-emerald-400">+100 pips</span>
+            <span className={`font-black ${isTp2Hit ? "text-teal-400 font-mono" : "text-teal-500/80"}`}>
+              +100 pips {isTp2Hit ? "✓" : ""}
+            </span>
           </div>
 
           {/* TP3 */}
           <div
-            className={`flex items-center justify-between py-1 px-2 rounded-lg transition ${
-              currentStatus === "TP3 HIT" || currentStatus === "TP4 HIT"
-                ? "bg-emerald-950/40 border border-emerald-500/40 text-emerald-300"
-                : "text-slate-300"
+            className={`flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all ${
+              isTp3Hit
+                ? "bg-cyan-950/60 border border-cyan-500/50 text-cyan-300 shadow-sm"
+                : "text-slate-300 bg-slate-900/40 border border-transparent"
             }`}
           >
-            <span className="font-semibold flex items-center gap-1.5">
-              {(currentStatus === "TP3 HIT" || currentStatus === "TP4 HIT") && (
-                <span className="text-[10px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.2 rounded">
+            <span className="font-semibold flex items-center gap-2">
+              {isTp3Hit ? (
+                <span className="text-[10px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.5 rounded shadow-sm">
                   HIT ✓
                 </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-slate-600" />
               )}
               <span className="text-slate-400">TP3 ·</span>{" "}
               <span className="text-slate-100 font-bold">{tp3.toFixed(3)}</span>
             </span>
-            <span className="font-black text-emerald-400">+150 pips</span>
+            <span className={`font-black ${isTp3Hit ? "text-cyan-400 font-mono" : "text-cyan-500/80"}`}>
+              +150 pips {isTp3Hit ? "✓" : ""}
+            </span>
           </div>
 
           {/* TP4 */}
           <div
-            className={`flex items-center justify-between py-1 px-2 rounded-lg transition ${
-              currentStatus === "TP4 HIT"
-                ? "bg-emerald-950/40 border border-emerald-500/40 text-emerald-300"
-                : "text-slate-300"
+            className={`flex items-center justify-between py-1.5 px-2.5 rounded-xl transition-all ${
+              isTp4Hit
+                ? "bg-gradient-to-r from-emerald-950/90 to-teal-950/90 border-2 border-emerald-400 text-emerald-100 shadow-md shadow-emerald-500/20"
+                : "text-slate-300 bg-slate-900/40 border border-transparent"
             }`}
           >
-            <span className="font-semibold flex items-center gap-1.5">
-              {currentStatus === "TP4 HIT" && (
-                <span className="text-[10px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.2 rounded">
-                  HIT ✓
+            <span className="font-semibold flex items-center gap-2">
+              {isTp4Hit ? (
+                <span className="text-[10px] bg-gradient-to-r from-amber-400 to-emerald-400 text-slate-950 font-black px-2 py-0.5 rounded shadow-md">
+                  HIT MAX ✓
                 </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-slate-600" />
               )}
-              <span className="text-slate-400">TP4 ·</span>{" "}
-              <span className="text-slate-100 font-bold">{tp4.toFixed(3)}</span>
+              <span className={isTp4Hit ? "text-emerald-300 font-black" : "text-slate-400"}>TP4 ·</span>{" "}
+              <span className={`font-bold ${isTp4Hit ? "text-white text-base" : "text-slate-100"}`}>{tp4.toFixed(3)}</span>
             </span>
-            <span className="font-black text-emerald-400">+200 pips</span>
+            <span className={`font-black ${isTp4Hit ? "text-emerald-300 text-sm font-mono tracking-tight" : "text-emerald-500/80"}`}>
+              +200 pips {isTp4Hit ? "🎯 (WIN MAX)" : ""}
+            </span>
           </div>
         </div>
 

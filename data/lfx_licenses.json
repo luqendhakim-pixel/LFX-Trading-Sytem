@@ -1,0 +1,18 @@
+[
+  {
+    "code": "LFX-150VIP",
+    "createdAt": 1788863033246,
+    "durationDays": 30,
+    "priceIdr": 150000,
+    "isUsed": false,
+    "createdBy": "ADMIN"
+  },
+  {
+    "code": "LFX-889900",
+    "createdAt": 1788863033246,
+    "durationDays": 30,
+    "priceIdr": 150000,
+    "isUsed": false,
+    "createdBy": "ADMIN"
+  }
+]

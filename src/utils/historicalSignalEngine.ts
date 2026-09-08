@@ -16,13 +16,16 @@ export interface HistoricalEngineResult {
  */
 function formatWib(ms: number): string {
   try {
-    const d = new Date(ms);
-    const utc = d.getTime() + d.getTimezoneOffset() * 60000;
-    const wib = new Date(utc + 7 * 3600000);
-    return `${wib.getHours().toString().padStart(2, "0")}:${wib
-      .getMinutes()
-      .toString()
-      .padStart(2, "0")} WIB`;
+    return (
+      new Date(ms).toLocaleString("id-ID", {
+        timeZone: "Asia/Jakarta",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " WIB"
+    );
   } catch (e) {
     return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
@@ -256,21 +259,27 @@ export function generateHistoricalSignalsFromCandles(
       if (hitTp4 || currentPips >= 200) {
         finalSignalStatus = "TP4 HIT";
         finalCloseResult = "WIN";
+        finalRealizedPips = Math.max(200, currentPips);
       } else if (hitTp3 || currentPips >= 150) {
         finalSignalStatus = "TP3 HIT";
         finalCloseResult = "WIN";
+        finalRealizedPips = Math.max(150, currentPips);
       } else if (hitTp2 || currentPips >= 100) {
         finalSignalStatus = "TP2 HIT";
         finalCloseResult = "WIN";
+        finalRealizedPips = Math.max(100, currentPips);
       } else if (hitTp1 || currentPips >= 50) {
         finalSignalStatus = "TP1 HIT";
         finalCloseResult = "WIN";
+        finalRealizedPips = Math.max(50, currentPips);
       } else if (currentPips >= 30) {
         finalSignalStatus = "BE SET (+30p)";
         finalCloseResult = "BE";
+        finalRealizedPips = currentPips;
       } else {
         finalSignalStatus = "ACTIVE";
         finalCloseResult = undefined;
+        finalRealizedPips = currentPips;
       }
     } else {
       // Prior signal in history
@@ -287,21 +296,27 @@ export function generateHistoricalSignalsFromCandles(
           if (hitTp3) {
             finalSignalStatus = "TP3 HIT";
             finalCloseResult = "WIN";
+            finalRealizedPips = 150;
           } else if (hitTp2) {
             finalSignalStatus = "TP2 HIT";
             finalCloseResult = "WIN";
+            finalRealizedPips = 100;
           } else if (hitTp1 || revPips >= 50) {
             finalSignalStatus = "TP1 HIT";
             finalCloseResult = "WIN";
+            finalRealizedPips = 50;
           } else if (revPips > 0) {
             finalSignalStatus = "TP1 HIT";
             finalCloseResult = "WIN";
-          } else if (revPips === 0) {
+            finalRealizedPips = Math.max(20, revPips);
+          } else if (revPips === 0 || hitTp1) {
             finalSignalStatus = "BREAK EVEN";
             finalCloseResult = "BE";
+            finalRealizedPips = 0;
           } else {
             finalSignalStatus = "SL HIT";
             finalCloseResult = "LOSS";
+            finalRealizedPips = -50;
           }
         }
       }

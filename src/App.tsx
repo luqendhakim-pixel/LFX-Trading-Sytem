@@ -441,7 +441,23 @@ const loadStoredSignals = (): AISignal[] => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          // DEDUPLIKASI KETAT: Hanya boleh ada MAKSIMAL 1 sinyal aktif
+          const clean: AISignal[] = [];
+          let activeFound = false;
+          for (const s of parsed) {
+            if (s.status === "ACTIVE") {
+              if (!activeFound && s.id !== "SIG-XAU-TV-1788794615693") {
+                activeFound = true;
+                s.signalStatus = "ACTIVE"; // LIVE RUNNING
+                clean.push(s);
+              }
+            } else {
+              if (s.id !== "SIG-XAU-TV-1788794615693") {
+                clean.push(s);
+              }
+            }
+          }
+          return clean.length > 0 ? clean : parsed;
         }
       }
     } catch (e) {
@@ -463,12 +479,12 @@ const INITIAL_POSITIONS: Position[] = [
     symbol: "XAU/USD",
     type: "BUY",
     lotSize: 0.1,
-    entryPrice: 4500.50,
-    currentPrice: 4520.50,
-    stopLoss: 4495.50,
-    takeProfit: 4505.50,
-    takeProfit2: 4510.50,
-    takeProfit3: 4515.50,
+    entryPrice: 4410.50,
+    currentPrice: 4430.50,
+    stopLoss: 4405.50,
+    takeProfit: 4415.50,
+    takeProfit2: 4420.50,
+    takeProfit3: 4425.50,
     status: "CLOSED",
     pnlUsd: 200.0,
     pnlPips: 200,
@@ -601,8 +617,9 @@ const INITIAL_POSITIONS: Position[] = [
 ];
 
 export default function App() {
+  const isInitialLoadRef = useRef<boolean>(true);
   const lastNotifiedSignalKeyRef = useRef<string>("");
-  const lastSignalNotifiedTimestampRef = useRef<number>(0);
+  const lastSignalNotifiedTimestampRef = useRef<number>(Date.now());
   const notifiedHitKeysRef = useRef<Set<string>>(new Set());
 
   // 1. Navigation & View State
@@ -660,7 +677,9 @@ export default function App() {
     );
   };
   const [isAiScanning, setIsAiScanning] = useState(false);
-  const [candles, setCandles] = useState<Candle[]>(() => generateInitialGoldCandles(80, 4500.5));
+  const [candles, setCandles] = useState<Candle[]>(() =>
+    generateInitialGoldCandles(80, realtimeMarketManager.getLatestTick().price || 4414.0)
+  );
   const [timeframe, setTimeframe] = useState<Timeframe>("M5");
   const [streamStats, setStreamStats] = useState<StreamStats>(() => realtimeMarketManager.getStats());
   const [currentTick, setCurrentTick] = useState<Tick>(() => realtimeMarketManager.getLatestTick());
@@ -668,7 +687,7 @@ export default function App() {
   // Dynamic candle fetcher from live server market feed
   const fetchRealCandles = useCallback(async (tf: Timeframe) => {
     try {
-      const res = await fetch(`/api/market/gold/candles?timeframe=${tf}&count=80`);
+      const res = await fetch(`/api/market/gold/candles?timeframe=${tf}&count=250`);
       if (res.ok) {
         const json = await res.json();
         if (json.candles && Array.isArray(json.candles) && json.candles.length > 0) {
@@ -753,14 +772,123 @@ export default function App() {
     }
   };
 
-  // 7. Trigger AI & TradingView Strategy Scan (Evaluates Complete Candle History from Bar 0 to Live)
+  // Synchronize state with background Node.js Server Signal Engine
+  // Ensures signals & winrate calculations persist 24/7 even when phone is locked or app refreshed!
+  const syncWithServerState = useCallback(async () => {
+    try {
+      const res = await fetch("/api/signals/state");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          const { currentSignal: serverActive, signalsList: serverList } = json.data;
+
+          if (Array.isArray(serverList) && serverList.length > 0) {
+            // DEDUPLIKASI KETAT: Hanya boleh ada 1 sinyal aktif
+            const cleanList: AISignal[] = [];
+            let activeAssigned = false;
+
+            for (const s of serverList) {
+              if (s.status === "ACTIVE") {
+                if (!activeAssigned && s.id !== "SIG-XAU-TV-1788794615693") {
+                  activeAssigned = true;
+                  cleanList.push({
+                    ...(s as AISignal),
+                    signalStatus: (s as AISignal).signalStatus || "ACTIVE",
+                  });
+                }
+              } else {
+                if (s.id !== "SIG-XAU-TV-1788794615693") {
+                  cleanList.push(s as AISignal);
+                }
+              }
+            }
+
+            setSignalsList((prev) => {
+              if (prev.length !== cleanList.length) return cleanList;
+              const hasDiff = prev.some((p, i) => {
+                const c = cleanList[i];
+                return (
+                  !c ||
+                  p.id !== c.id ||
+                  p.signalStatus !== c.signalStatus ||
+                  p.status !== c.status ||
+                  p.realizedPips !== c.realizedPips ||
+                  p.closeResult !== c.closeResult
+                );
+              });
+              return hasDiff ? cleanList : prev;
+            });
+          }
+
+          if (serverActive && serverActive.entryPrice !== 4500) {
+            setCurrentSignal((prev) => {
+              if (
+                !prev ||
+                prev.id !== serverActive.id ||
+                prev.entryPrice !== serverActive.entryPrice ||
+                prev.signalStatus !== serverActive.signalStatus ||
+                prev.status !== serverActive.status ||
+                prev.isBreakevenSet !== serverActive.isBreakevenSet
+              ) {
+                const updatedActive = serverActive as AISignal;
+                setSelectedSignal((prevSel) =>
+                  prevSel && prevSel.id === updatedActive.id ? updatedActive : prevSel
+                );
+
+                const setupZoneBucket = Math.round(updatedActive.entryPrice / 2.5) * 2.5;
+                const signalKey = `${updatedActive.signalType}_${updatedActive.timeframe || "M15"}_${setupZoneBucket.toFixed(1)}_${Math.round(updatedActive.stopLoss)}`;
+
+                // Mencegah notifikasi berulang saat baru reload / refresh
+                if (isInitialLoadRef.current) {
+                  lastNotifiedSignalKeyRef.current = signalKey;
+                  lastSignalNotifiedTimestampRef.current = Date.now();
+                } else if (prev && prev.id !== updatedActive.id && updatedActive.status === "ACTIVE") {
+                  notificationService.playSignalSound();
+                  notificationService.sendSignalNotification(updatedActive);
+                  const newToast: SignalToastItem = {
+                    id: `toast-${Date.now()}`,
+                    signal: updatedActive,
+                    timeframe: updatedActive.timeframe || "M5",
+                    createdAt: Date.now(),
+                    durationMs: 14000,
+                    alertType: "NEW_SIGNAL",
+                    customTitle: `🚨 SINYAL BARU: ${updatedActive.signalType} ${updatedActive.symbol || "XAUUSD"} [${updatedActive.timeframe || "M5"}]`,
+                    customBody: `Sinyal Entry TradingView Live di $${updatedActive.entryPrice.toFixed(2)} • SL ${updatedActive.pipsSl || 50}p • TP1 +${updatedActive.pipsTp1 || 50}p`,
+                  };
+                  setSignalToasts((t) => [newToast, ...t.slice(0, 1)]);
+                  lastNotifiedSignalKeyRef.current = signalKey;
+                  lastSignalNotifiedTimestampRef.current = Date.now();
+                }
+
+                return updatedActive;
+              }
+              return prev;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      // Soft fail, offline resilience fallback
+    }
+  }, []);
+
+  // 7. Trigger AI & TradingView Strategy Scan (Evaluates Complete Candle History)
   const triggerAiScan = useCallback(
     async (targetTimeframe?: Timeframe, targetCandles?: Candle[], forceNotify: boolean = false) => {
       setIsAiScanning(true);
       const activeTf = targetTimeframe || timeframeRef.current;
       const activeCandles = targetCandles || candlesRef.current;
+
+      // Mencegah perhitungan dummy jika data candle riil belum masuk dari server
+      if (!activeCandles || activeCandles.length < 15) {
+        syncWithServerState();
+        setIsAiScanning(false);
+        return;
+      }
+
       const tick = currentTickRef.current;
-      const livePrice = tick.price || (activeCandles.length > 0 ? activeCandles[activeCandles.length - 1].close : 4405.5);
+      const livePrice = tick.price || (activeCandles.length > 0 ? activeCandles[activeCandles.length - 1].close : 4400.0);
+      const activeExisting = currentSignalRef.current;
 
       try {
         const { signalsList: calculatedSignals, currentSignal: calculatedActiveSignal } =
@@ -771,7 +899,38 @@ export default function App() {
         }
 
         if (calculatedActiveSignal) {
+          // Jangan terima sinyal dengan harga fallback dummy 4500 atau outlier jauh dari harga live
+          if (calculatedActiveSignal.entryPrice === 4500 || Math.abs(calculatedActiveSignal.entryPrice - livePrice) > 35.0) {
+            console.warn(`[Guard] Mengabaikan sinyal entry outlier $${calculatedActiveSignal.entryPrice} vs live $${livePrice}`);
+            setIsAiScanning(false);
+            return;
+          }
+
+          // Pertahankan progres live trade jika masih sinyal aktif yang sama
+          if (
+            activeExisting &&
+            activeExisting.status === "ACTIVE" &&
+            Math.abs(activeExisting.entryPrice - calculatedActiveSignal.entryPrice) < 0.25 &&
+            activeExisting.signalType === calculatedActiveSignal.signalType
+          ) {
+            calculatedActiveSignal.signalStatus = activeExisting.signalStatus || calculatedActiveSignal.signalStatus;
+            calculatedActiveSignal.isBreakevenSet = activeExisting.isBreakevenSet || calculatedActiveSignal.isBreakevenSet;
+            calculatedActiveSignal.effectiveStopLoss = activeExisting.effectiveStopLoss || calculatedActiveSignal.effectiveStopLoss;
+            calculatedActiveSignal.realizedPips = activeExisting.realizedPips ?? calculatedActiveSignal.realizedPips;
+            calculatedActiveSignal.closeResult = activeExisting.closeResult ?? calculatedActiveSignal.closeResult;
+          }
+
           setCurrentSignal(calculatedActiveSignal);
+
+          // Synchronize authoritative TradingView signal with background server engine
+          fetch("/api/signals/sync-tradingview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              currentSignal: calculatedActiveSignal,
+              signalsList: calculatedSignals,
+            }),
+          }).catch(() => {});
 
           const isActionable =
             calculatedActiveSignal.signalType.includes("BUY") ||
@@ -785,7 +944,7 @@ export default function App() {
           const isCooldownElapsed = now - lastSignalNotifiedTimestampRef.current > cooldownMs;
           const isNewSetup = lastNotifiedSignalKeyRef.current !== signalKey;
 
-          if (isActionable && (forceNotify || (isNewSetup && isCooldownElapsed))) {
+          if (isActionable && !isInitialLoadRef.current && (forceNotify || (isNewSetup && isCooldownElapsed))) {
             lastNotifiedSignalKeyRef.current = signalKey;
             lastSignalNotifiedTimestampRef.current = now;
 
@@ -811,7 +970,7 @@ export default function App() {
         setIsAiScanning(false);
       }
     },
-    []
+    [syncWithServerState]
   );
 
   // Timeframe switch handler: fetches candles from server, recalculates history from beginning, updates state
@@ -848,6 +1007,9 @@ export default function App() {
     const livePrice = liveTick.price;
     if (!livePrice || livePrice <= 0) return;
 
+    // GUARD 1: Abaikan tick unverified sebelum stream live riil dari server/pasar tersambung (mencegah ghost hit saat reload/refresh pertama kali)
+    if (!liveTick.isVerifiedLive) return;
+
     const currentSig = currentSignalRef.current;
     if (!currentSig) return;
     if (currentSig.status === "COMPLETED") return;
@@ -858,6 +1020,13 @@ export default function App() {
 
     const entry = currentSig.entryPrice;
     const initialSl = currentSig.stopLoss;
+
+    // GUARD 2: Tolak anomali lonjakan ekstrim (misal harga dummy usang 4500 saat entry 4413 = selisih $87 / 870 pips)
+    if (Math.abs(livePrice - entry) > 35.0) {
+      console.warn(`[Guard] Mengabaikan tick outlier $${livePrice} vs entry $${entry}`);
+      return;
+    }
+
     const isBeActive = !!currentSig.isBreakevenSet;
     const effectiveSl = isBeActive ? entry : initialSl;
 
@@ -907,6 +1076,13 @@ export default function App() {
         setSelectedSignal((prevSel) =>
           prevSel && prevSel.id === currentSig.id ? updatedWithBe : prevSel
         );
+
+        // Immediate background sync to server
+        fetch("/api/signals/update-signal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signal: updatedWithBe }),
+        }).catch(() => {});
         return;
       }
     }
@@ -917,19 +1093,19 @@ export default function App() {
     let closeResult: "WIN" | "LOSS" | "BE" = "WIN";
 
     if (isBuy) {
-      if (livePrice >= tp4) {
+      if ((livePrice >= tp4 || runningPips >= 200) && currentSig.signalStatus !== "TP4 HIT") {
         targetHit = "TP4";
         pips = currentSig.pipsTp4 || 200;
         closeResult = "WIN";
-      } else if (livePrice >= tp3 && currentSig.signalStatus !== "TP3 HIT" && currentSig.signalStatus !== "TP4 HIT") {
+      } else if ((livePrice >= tp3 || runningPips >= 150) && currentSig.signalStatus !== "TP3 HIT" && currentSig.signalStatus !== "TP4 HIT") {
         targetHit = "TP3";
         pips = currentSig.pipsTp3 || 150;
         closeResult = "WIN";
-      } else if (livePrice >= tp2 && currentSig.signalStatus !== "TP2 HIT" && currentSig.signalStatus !== "TP3 HIT" && currentSig.signalStatus !== "TP4 HIT") {
+      } else if ((livePrice >= tp2 || runningPips >= 100) && currentSig.signalStatus !== "TP2 HIT" && currentSig.signalStatus !== "TP3 HIT" && currentSig.signalStatus !== "TP4 HIT") {
         targetHit = "TP2";
         pips = currentSig.pipsTp2 || 100;
         closeResult = "WIN";
-      } else if (livePrice >= tp1 && currentSig.signalStatus === "ACTIVE" || (runningPips >= 50 && currentSig.signalStatus === "BE SET (+30p)")) {
+      } else if ((livePrice >= tp1 || runningPips >= 50) && (currentSig.signalStatus === "ACTIVE" || currentSig.signalStatus === "BE SET (+30p)")) {
         targetHit = "TP1";
         pips = currentSig.pipsTp1 || 50;
         closeResult = "WIN";
@@ -944,19 +1120,19 @@ export default function App() {
         closeResult = "LOSS";
       }
     } else if (isSell) {
-      if (livePrice <= tp4) {
+      if ((livePrice <= tp4 || runningPips >= 200) && currentSig.signalStatus !== "TP4 HIT") {
         targetHit = "TP4";
         pips = currentSig.pipsTp4 || 200;
         closeResult = "WIN";
-      } else if (livePrice <= tp3 && currentSig.signalStatus !== "TP3 HIT" && currentSig.signalStatus !== "TP4 HIT") {
+      } else if ((livePrice <= tp3 || runningPips >= 150) && currentSig.signalStatus !== "TP3 HIT" && currentSig.signalStatus !== "TP4 HIT") {
         targetHit = "TP3";
         pips = currentSig.pipsTp3 || 150;
         closeResult = "WIN";
-      } else if (livePrice <= tp2 && currentSig.signalStatus !== "TP2 HIT" && currentSig.signalStatus !== "TP3 HIT" && currentSig.signalStatus !== "TP4 HIT") {
+      } else if ((livePrice <= tp2 || runningPips >= 100) && currentSig.signalStatus !== "TP2 HIT" && currentSig.signalStatus !== "TP3 HIT" && currentSig.signalStatus !== "TP4 HIT") {
         targetHit = "TP2";
         pips = currentSig.pipsTp2 || 100;
         closeResult = "WIN";
-      } else if ((livePrice <= tp1 && currentSig.signalStatus === "ACTIVE") || (runningPips >= 50 && currentSig.signalStatus === "BE SET (+30p)")) {
+      } else if ((livePrice <= tp1 || runningPips >= 50) && (currentSig.signalStatus === "ACTIVE" || currentSig.signalStatus === "BE SET (+30p)")) {
         targetHit = "TP1";
         pips = currentSig.pipsTp1 || 50;
         closeResult = "WIN";
@@ -990,9 +1166,9 @@ export default function App() {
             ? "SL HIT"
             : "BREAK EVEN";
 
-        // IMPORTANT: Status CLOSED is ONLY triggered when SL is hit, BE is hit, or TP4 is hit (full target)!
-        // TP1, TP2, and TP3 remain RUNNING with Break Even protection.
-        const isCompleted = targetHit === "SL" || targetHit === "BE" || targetHit === "TP4";
+        // Status CLOSED is ONLY triggered when SL is hit or BE is hit
+        // TP1, TP2, TP3, and TP4 remain running in live position with full profit lock
+        const isCompleted = targetHit === "SL" || targetHit === "BE";
         const updatedSignal: AISignal = {
           ...currentSig,
           signalStatus: newSignalStatus,
@@ -1052,6 +1228,13 @@ export default function App() {
         setSelectedSignal((prevSel) =>
           prevSel && prevSel.id === currentSig.id ? updatedSignal : prevSel
         );
+
+        // Immediate background sync to server
+        fetch("/api/signals/update-signal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signal: updatedSignal }),
+        }).catch(() => {});
       }
     }
   }, []);
@@ -1059,6 +1242,19 @@ export default function App() {
   // Initial Load & Live Market Tick Stream Synchronizer
   useEffect(() => {
     realtimeMarketManager.start();
+
+    // 1. Immediately synchronize with server background engine on load or phone browser refresh
+    syncWithServerState();
+
+    // Release initial load lock after initial sync & market tick initialization
+    const initialLoadTimer = setTimeout(() => {
+      isInitialLoadRef.current = false;
+    }, 4000);
+
+    // 2. Auto-register Web Push background notifications if user already granted permission
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      notificationService.registerWebPushSubscription().catch(() => {});
+    }
 
     // Fetch initial candles from server
     fetchRealCandles(timeframe).then((loadedCandles) => {
@@ -1090,15 +1286,22 @@ export default function App() {
       checkSignalHitsAgainstLivePrice(liveTick);
     });
 
+    // Frequent light sync with server engine (keeps phone in 100% lock-step with 24/7 background calculations)
+    const serverSyncInterval = setInterval(() => {
+      syncWithServerState();
+    }, 2500);
+
     const interval = setInterval(() => {
       triggerAiScan();
     }, 60000);
 
     return () => {
       unsubscribe();
+      clearTimeout(initialLoadTimer);
+      clearInterval(serverSyncInterval);
       clearInterval(interval);
     };
-  }, [timeframe, fetchRealCandles, triggerAiScan, checkSignalHitsAgainstLivePrice]);
+  }, [timeframe, fetchRealCandles, triggerAiScan, checkSignalHitsAgainstLivePrice, syncWithServerState]);
 
   // Handlers for Modals
   const handleOpenLotSimulation = (sig?: AISignal) => {
@@ -1175,6 +1378,7 @@ export default function App() {
             ) : (
               <SignalsListView
                 signalsList={signalsList}
+                currentPrice={currentTick.price}
                 onSelectSignal={handleSelectSignalForDetail}
                 onRefreshScan={() => triggerAiScan(timeframe, candles, true)}
                 isScanning={isAiScanning}
