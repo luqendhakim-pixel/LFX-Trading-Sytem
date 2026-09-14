@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import confetti from "canvas-confetti";
 import {
   Candle,
@@ -42,7 +42,13 @@ import { ShareSignalModal } from "./components/ShareSignalModal";
 import { EducationModal } from "./components/EducationModal";
 import { ContestModal } from "./components/ContestModal";
 import { ExnessAccountModal } from "./components/ExnessAccountModal";
-import { MobileNotificationHub } from "./components/MobileNotificationHub";
+import { SignalNotificationModal } from "./components/SignalNotificationModal";
+import {
+  buildNotificationsFromSignals,
+  getStoredReadNotificationIds,
+  saveReadNotificationIds,
+  formatWibTime,
+} from "./utils/notificationHelper";
 import { SignalAlertToast, SignalToastItem } from "./components/SignalAlertToast";
 import { AuthModal } from "./components/AuthModal";
 import { SubscriptionPaywallModal } from "./components/SubscriptionPaywallModal";
@@ -441,23 +447,36 @@ const loadStoredSignals = (): AISignal[] => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // DEDUPLIKASI KETAT: Hanya boleh ada MAKSIMAL 1 sinyal aktif
-          const clean: AISignal[] = [];
-          let activeFound = false;
-          for (const s of parsed) {
-            if (s.status === "ACTIVE") {
-              if (!activeFound && s.id !== "SIG-XAU-TV-1788794615693") {
-                activeFound = true;
-                s.signalStatus = "ACTIVE"; // LIVE RUNNING
-                clean.push(s);
-              }
-            } else {
-              if (s.id !== "SIG-XAU-TV-1788794615693") {
-                clean.push(s);
-              }
+          // Filter out dummy artifacts
+          const valid = parsed.filter(
+            (s: AISignal) => s.id !== "SIG-XAU-TV-1788794615693" && s.entryPrice !== 4500
+          );
+          // Sort descending by createdAt (newest first)
+          valid.sort((a: AISignal, b: AISignal) => b.createdAt - a.createdAt);
+
+          // HANYA sinyal pertama (paling baru / index 0) yang boleh aktif
+          // Semua sinyal sebelumnya (index >= 1) WAJIB berstatus COMPLETED
+          const clean: AISignal[] = valid.map((s: AISignal, index: number) => {
+            if (index === 0) {
+              return s;
             }
-          }
-          return clean.length > 0 ? clean : parsed;
+            if (s.status === "ACTIVE") {
+              return {
+                ...s,
+                status: "COMPLETED",
+                signalStatus:
+                  s.signalStatus === "ACTIVE"
+                    ? s.realizedPips && s.realizedPips > 0
+                      ? "TP1 HIT"
+                      : "BREAK EVEN"
+                    : s.signalStatus,
+                closeResult:
+                  s.closeResult || (s.realizedPips && s.realizedPips > 0 ? "WIN" : "BE"),
+              };
+            }
+            return s;
+          });
+          return clean.length > 0 ? clean : valid;
         }
       }
     } catch (e) {
@@ -616,11 +635,31 @@ const INITIAL_POSITIONS: Position[] = [
   },
 ];
 
+function getInitialNotifiedEventKeys(): Set<string> {
+  const set = new Set<string>();
+  try {
+    const raw = sessionStorage.getItem("lfx_notified_event_keys");
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        arr.forEach((k) => set.add(k));
+      }
+    }
+  } catch {}
+  return set;
+}
+
+function persistNotifiedEventKey(key: string, set: Set<string>) {
+  set.add(key);
+  try {
+    const arr = Array.from(set).slice(-300);
+    sessionStorage.setItem("lfx_notified_event_keys", JSON.stringify(arr));
+  } catch {}
+}
+
 export default function App() {
   const isInitialLoadRef = useRef<boolean>(true);
-  const lastNotifiedSignalKeyRef = useRef<string>("");
-  const lastSignalNotifiedTimestampRef = useRef<number>(Date.now());
-  const notifiedHitKeysRef = useRef<Set<string>>(new Set());
+  const notifiedEventKeysRef = useRef<Set<string>>(getInitialNotifiedEventKeys());
 
   // 1. Navigation & View State
   const [activeNavTab, setActiveNavTab] = useState<NavTab>("BERANDA");
@@ -647,9 +686,100 @@ export default function App() {
   const [isContestModalOpen, setIsContestModalOpen] = useState(false);
   const [isExnessModalOpen, setIsExnessModalOpen] = useState(false);
   const [isNotifHubOpen, setIsNotifHubOpen] = useState(false);
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(() =>
+    getStoredReadNotificationIds()
+  );
+  const [liveEventNotifications, setLiveEventNotifications] = useState<MobileNotification[]>([]);
   const [signalToasts, setSignalToasts] = useState<SignalToastItem[]>([]);
   const [pushNotificationEnabled, setPushNotificationEnabled] = useState(
     () => typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted"
+  );
+
+  // Floating Toast manager: strictly ensures no duplicates and at most 1 active toast on screen
+  const pushToastAlert = useCallback((newToast: SignalToastItem) => {
+    setSignalToasts((prev) => {
+      const hasDuplicate = prev.some(
+        (t) =>
+          t.alertType === newToast.alertType &&
+          (t.signal.id === newToast.signal.id ||
+            (t.signal.signalType === newToast.signal.signalType &&
+              Math.abs(t.signal.entryPrice - newToast.signal.entryPrice) < 0.2))
+      );
+      if (hasDuplicate) return prev;
+      return [newToast];
+    });
+  }, []);
+
+  // Centralized new signal notification emitter with strict deduplication
+  const notifyNewSignalIfEligible = useCallback(
+    (signal: AISignal, activeTf: string) => {
+      if (isInitialLoadRef.current) return;
+      if (!signal || !signal.signalType) return;
+      if (!signal.signalType.includes("BUY") && !signal.signalType.includes("SELL")) return;
+
+      // Do NOT notify as "new signal" if the trade is ALREADY running (BE set, TP1 hit, TP2 hit, etc.)
+      if (signal.isBreakevenSet) return;
+      if (signal.signalStatus && signal.signalStatus !== "ACTIVE") return;
+      if (signal.status && signal.status !== "ACTIVE") return;
+
+      const idKey = `SIG_ENTRY_${signal.id}`;
+      const coreKey = `SIG_CORE_${signal.signalType}_${Math.round(signal.entryPrice * 10)}`;
+
+      if (
+        notifiedEventKeysRef.current.has(idKey) ||
+        notifiedEventKeysRef.current.has(coreKey)
+      ) {
+        return;
+      }
+
+      // Only notify fresh signals created within last 15 minutes
+      const ageMs = Date.now() - (signal.createdAt || Date.now());
+      if (ageMs > 15 * 60 * 1000) {
+        persistNotifiedEventKey(idKey, notifiedEventKeysRef.current);
+        persistNotifiedEventKey(coreKey, notifiedEventKeysRef.current);
+        return;
+      }
+
+      persistNotifiedEventKey(idKey, notifiedEventKeysRef.current);
+      persistNotifiedEventKey(coreKey, notifiedEventKeysRef.current);
+
+      notificationService.playSignalSound();
+      notificationService.sendSignalNotification(signal);
+
+      // Append to live real-time notification feed
+      const entryNotifId = `notif-live-entry-${signal.id}-${Date.now()}`;
+      const entryNotif: MobileNotification = {
+        id: entryNotifId,
+        title: `🚨 SINYAL BARU: ${signal.signalType} ${signal.symbol || "XAUUSD"} [${activeTf || signal.timeframe || "M5"}]`,
+        body: `Entry di $${signal.entryPrice.toFixed(2)} • SL $${signal.stopLoss.toFixed(2)} (${signal.pipsSl || 50}p) • TP1 $${signal.takeProfit1.toFixed(2)} (+${signal.pipsTp1 || 50}p)`,
+        time: formatWibTime(Date.now()),
+        timestampMs: Date.now(),
+        type: "SIGNAL",
+        params: {
+          action: signal.signalType.includes("BUY") ? "BUY" : "SELL",
+          entry: signal.entryPrice,
+          sl: signal.stopLoss,
+          tp: signal.takeProfit1,
+          lot: 0.1,
+        },
+        read: false,
+        signalId: signal.id,
+      };
+      setLiveEventNotifications((prev) => [entryNotif, ...prev]);
+
+      const newToast: SignalToastItem = {
+        id: `toast-${Date.now()}`,
+        signal,
+        timeframe: (activeTf || signal.timeframe || "M5") as Timeframe,
+        createdAt: Date.now(),
+        durationMs: 8000,
+        alertType: "NEW_SIGNAL",
+        customTitle: `🚨 SINYAL BARU: ${signal.signalType} ${signal.symbol || "XAUUSD"} [${activeTf || signal.timeframe || "M5"}]`,
+        customBody: `Sinyal Entry TradingView Live di $${signal.entryPrice.toFixed(2)} • SL ${signal.pipsSl || 50}p • TP1 +${signal.pipsTp1 || 50}p`,
+      };
+      pushToastAlert(newToast);
+    },
+    [pushToastAlert]
   );
 
   // 3. Signals & Market Data
@@ -657,8 +787,52 @@ export default function App() {
   const [positions, setPositions] = useState<Position[]>(INITIAL_POSITIONS);
   const [currentSignal, setCurrentSignal] = useState<AISignal | null>(() => {
     const list = loadStoredSignals();
-    return list.find((s) => s.status === "ACTIVE") || list[0] || null;
+    // Prioritaskan selalu sinyal teratas (paling baru) dari histori lilin
+    return list.length > 0 ? list[0] : null;
   });
+
+  // Synchronized notifications: combines true history of signalsList + real-time live events
+  const notifications = useMemo(() => {
+    const historyNotifs = buildNotificationsFromSignals(signalsList, readNotificationIds);
+    const map = new Map<string, MobileNotification>();
+    for (const n of liveEventNotifications) {
+      map.set(n.id, {
+        ...n,
+        read: readNotificationIds.has(n.id),
+      });
+    }
+    for (const n of historyNotifs) {
+      if (!map.has(n.id)) {
+        map.set(n.id, n);
+      }
+    }
+    const combined = Array.from(map.values());
+    combined.sort((a, b) => (b.timestampMs || 0) - (a.timestampMs || 0));
+    return combined;
+  }, [signalsList, liveEventNotifications, readNotificationIds]);
+
+  const unreadNotifCount = useMemo(() => {
+    return notifications.filter((n) => !n.read).length;
+  }, [notifications]);
+
+  const handleMarkAllNotificationsAsRead = useCallback(() => {
+    setReadNotificationIds((prev) => {
+      const next = new Set(prev);
+      notifications.forEach((n) => next.add(n.id));
+      saveReadNotificationIds(next);
+      return next;
+    });
+  }, [notifications]);
+
+  const handleClearNotifications = useCallback(() => {
+    setReadNotificationIds((prev) => {
+      const next = new Set(prev);
+      notifications.forEach((n) => next.add(n.id));
+      saveReadNotificationIds(next);
+      return next;
+    });
+    setLiveEventNotifications([]);
+  }, [notifications]);
 
   // Automatically persist signalsList to localStorage whenever updated
   useEffect(() => {
@@ -670,6 +844,39 @@ export default function App() {
       }
     }
   }, [signalsList]);
+
+  // Pre-seed already existing signals and milestones so they are never alerted on page load or refresh
+  useEffect(() => {
+    if (currentSignal) {
+      persistNotifiedEventKey(`SIG_ENTRY_${currentSignal.id}`, notifiedEventKeysRef.current);
+      persistNotifiedEventKey(`SIG_CORE_${currentSignal.signalType}_${Math.round(currentSignal.entryPrice * 10)}`, notifiedEventKeysRef.current);
+      if (currentSignal.isBreakevenSet) {
+        persistNotifiedEventKey(`${currentSignal.id}_BE_TRIGGERED`, notifiedEventKeysRef.current);
+      }
+      if (currentSignal.signalStatus?.includes("TP1")) {
+        persistNotifiedEventKey(`${currentSignal.id}_TP1`, notifiedEventKeysRef.current);
+      }
+      if (currentSignal.signalStatus?.includes("TP2")) {
+        persistNotifiedEventKey(`${currentSignal.id}_TP1`, notifiedEventKeysRef.current);
+        persistNotifiedEventKey(`${currentSignal.id}_TP2`, notifiedEventKeysRef.current);
+      }
+      if (currentSignal.signalStatus?.includes("TP3")) {
+        persistNotifiedEventKey(`${currentSignal.id}_TP1`, notifiedEventKeysRef.current);
+        persistNotifiedEventKey(`${currentSignal.id}_TP2`, notifiedEventKeysRef.current);
+        persistNotifiedEventKey(`${currentSignal.id}_TP3`, notifiedEventKeysRef.current);
+      }
+      if (currentSignal.signalStatus?.includes("TP4")) {
+        persistNotifiedEventKey(`${currentSignal.id}_TP1`, notifiedEventKeysRef.current);
+        persistNotifiedEventKey(`${currentSignal.id}_TP2`, notifiedEventKeysRef.current);
+        persistNotifiedEventKey(`${currentSignal.id}_TP3`, notifiedEventKeysRef.current);
+        persistNotifiedEventKey(`${currentSignal.id}_TP4`, notifiedEventKeysRef.current);
+      }
+    }
+    for (const s of signalsList) {
+      persistNotifiedEventKey(`SIG_ENTRY_${s.id}`, notifiedEventKeysRef.current);
+      persistNotifiedEventKey(`SIG_CORE_${s.signalType}_${Math.round(s.entryPrice * 10)}`, notifiedEventKeysRef.current);
+    }
+  }, []);
 
   const handleSaveJournal = (positionId: string, journal: TradeJournalData) => {
     setPositions((prev) =>
@@ -783,25 +990,31 @@ export default function App() {
           const { currentSignal: serverActive, signalsList: serverList } = json.data;
 
           if (Array.isArray(serverList) && serverList.length > 0) {
-            // DEDUPLIKASI KETAT: Hanya boleh ada 1 sinyal aktif
-            const cleanList: AISignal[] = [];
-            let activeAssigned = false;
+            // Urutkan sinyal server berdasarkan waktu terbaru lebih dulu
+            const sortedServerList = [...serverList]
+              .filter((s) => s.id !== "SIG-XAU-TV-1788794615693" && s.entryPrice !== 4500)
+              .sort((a, b) => b.createdAt - a.createdAt);
 
-            for (const s of serverList) {
-              if (s.status === "ACTIVE") {
-                if (!activeAssigned && s.id !== "SIG-XAU-TV-1788794615693") {
-                  activeAssigned = true;
-                  cleanList.push({
-                    ...(s as AISignal),
-                    signalStatus: (s as AISignal).signalStatus || "ACTIVE",
-                  });
-                }
-              } else {
-                if (s.id !== "SIG-XAU-TV-1788794615693") {
-                  cleanList.push(s as AISignal);
-                }
+            const cleanList: AISignal[] = sortedServerList.map((s, idx) => {
+              if (idx === 0) {
+                return s as AISignal;
               }
-            }
+              if (s.status === "ACTIVE") {
+                return {
+                  ...(s as AISignal),
+                  status: "COMPLETED",
+                  signalStatus:
+                    s.signalStatus === "ACTIVE"
+                      ? s.realizedPips && s.realizedPips > 0
+                        ? "TP1 HIT"
+                        : "BREAK EVEN"
+                      : s.signalStatus,
+                  closeResult:
+                    s.closeResult || (s.realizedPips && s.realizedPips > 0 ? "WIN" : "BE"),
+                };
+              }
+              return s as AISignal;
+            });
 
             setSignalsList((prev) => {
               if (prev.length !== cleanList.length) return cleanList;
@@ -818,52 +1031,38 @@ export default function App() {
               });
               return hasDiff ? cleanList : prev;
             });
-          }
 
-          if (serverActive && serverActive.entryPrice !== 4500) {
-            setCurrentSignal((prev) => {
-              if (
-                !prev ||
-                prev.id !== serverActive.id ||
-                prev.entryPrice !== serverActive.entryPrice ||
-                prev.signalStatus !== serverActive.signalStatus ||
-                prev.status !== serverActive.status ||
-                prev.isBreakevenSet !== serverActive.isBreakevenSet
-              ) {
-                const updatedActive = serverActive as AISignal;
-                setSelectedSignal((prevSel) =>
-                  prevSel && prevSel.id === updatedActive.id ? updatedActive : prevSel
-                );
+            const activeSignalToApply =
+              cleanList.length > 0
+                ? cleanList[0]
+                : serverActive && serverActive.entryPrice !== 4500
+                ? (serverActive as AISignal)
+                : null;
 
-                const setupZoneBucket = Math.round(updatedActive.entryPrice / 2.5) * 2.5;
-                const signalKey = `${updatedActive.signalType}_${updatedActive.timeframe || "M15"}_${setupZoneBucket.toFixed(1)}_${Math.round(updatedActive.stopLoss)}`;
+            if (activeSignalToApply) {
+              setCurrentSignal((prev) => {
+                if (
+                  !prev ||
+                  prev.id !== activeSignalToApply.id ||
+                  prev.signalType !== activeSignalToApply.signalType ||
+                  prev.entryPrice !== activeSignalToApply.entryPrice ||
+                  prev.signalStatus !== activeSignalToApply.signalStatus ||
+                  prev.status !== activeSignalToApply.status ||
+                  prev.isBreakevenSet !== activeSignalToApply.isBreakevenSet
+                ) {
+                  const updatedActive = activeSignalToApply;
+                  setSelectedSignal((prevSel) =>
+                    prevSel && prevSel.id === updatedActive.id ? updatedActive : prevSel
+                  );
 
-                // Mencegah notifikasi berulang saat baru reload / refresh
-                if (isInitialLoadRef.current) {
-                  lastNotifiedSignalKeyRef.current = signalKey;
-                  lastSignalNotifiedTimestampRef.current = Date.now();
-                } else if (prev && prev.id !== updatedActive.id && updatedActive.status === "ACTIVE") {
-                  notificationService.playSignalSound();
-                  notificationService.sendSignalNotification(updatedActive);
-                  const newToast: SignalToastItem = {
-                    id: `toast-${Date.now()}`,
-                    signal: updatedActive,
-                    timeframe: updatedActive.timeframe || "M5",
-                    createdAt: Date.now(),
-                    durationMs: 14000,
-                    alertType: "NEW_SIGNAL",
-                    customTitle: `🚨 SINYAL BARU: ${updatedActive.signalType} ${updatedActive.symbol || "XAUUSD"} [${updatedActive.timeframe || "M5"}]`,
-                    customBody: `Sinyal Entry TradingView Live di $${updatedActive.entryPrice.toFixed(2)} • SL ${updatedActive.pipsSl || 50}p • TP1 +${updatedActive.pipsTp1 || 50}p`,
-                  };
-                  setSignalToasts((t) => [newToast, ...t.slice(0, 1)]);
-                  lastNotifiedSignalKeyRef.current = signalKey;
-                  lastSignalNotifiedTimestampRef.current = Date.now();
+                  // Only notify if genuinely a brand new fresh signal and not already running
+                  notifyNewSignalIfEligible(updatedActive, updatedActive.timeframe || "M5");
+
+                  return updatedActive;
                 }
-
-                return updatedActive;
-              }
-              return prev;
-            });
+                return prev;
+              });
+            }
           }
         }
       }
@@ -932,37 +1131,8 @@ export default function App() {
             }),
           }).catch(() => {});
 
-          const isActionable =
-            calculatedActiveSignal.signalType.includes("BUY") ||
-            calculatedActiveSignal.signalType.includes("SELL");
-
-          const setupZoneBucket = Math.round(calculatedActiveSignal.entryPrice / 2.5) * 2.5;
-          const signalKey = `${calculatedActiveSignal.signalType}_${activeTf}_${setupZoneBucket.toFixed(1)}_${Math.round(calculatedActiveSignal.stopLoss)}`;
-
-          const now = Date.now();
-          const cooldownMs = 25000; // 25s responsive cooldown
-          const isCooldownElapsed = now - lastSignalNotifiedTimestampRef.current > cooldownMs;
-          const isNewSetup = lastNotifiedSignalKeyRef.current !== signalKey;
-
-          if (isActionable && !isInitialLoadRef.current && (forceNotify || (isNewSetup && isCooldownElapsed))) {
-            lastNotifiedSignalKeyRef.current = signalKey;
-            lastSignalNotifiedTimestampRef.current = now;
-
-            notificationService.playSignalSound();
-            notificationService.sendSignalNotification(calculatedActiveSignal);
-
-            const newToast: SignalToastItem = {
-              id: `toast-${Date.now()}`,
-              signal: calculatedActiveSignal,
-              timeframe: activeTf,
-              createdAt: Date.now(),
-              durationMs: 14000,
-              alertType: "NEW_SIGNAL",
-              customTitle: `🚨 ${calculatedActiveSignal.signalType.replace("_", " ")} ${calculatedActiveSignal.symbol || "XAUUSD"} [${activeTf}]`,
-              customBody: `Sinyal Entry Live di $${calculatedActiveSignal.entryPrice.toFixed(2)} • SL ${calculatedActiveSignal.pipsSl || 50}p • TP1 +${calculatedActiveSignal.pipsTp1 || 50}p`,
-            };
-            setSignalToasts((prev) => [newToast, ...prev.slice(0, 1)]);
-          }
+          // Only notify if genuinely fresh, eligible, and not yet alerted
+          notifyNewSignalIfEligible(calculatedActiveSignal, activeTf);
         }
       } catch (err) {
         console.error("AI scan error:", err);
@@ -1041,8 +1211,8 @@ export default function App() {
     // 1. Check Automatic Break Even Trigger at +30 Pips
     if (runningPips >= 30 && !isBeActive && currentSig.signalStatus === "ACTIVE") {
       const beKey = `${currentSig.id}_BE_TRIGGERED`;
-      if (!notifiedHitKeysRef.current.has(beKey)) {
-        notifiedHitKeysRef.current.add(beKey);
+      if (!notifiedEventKeysRef.current.has(beKey)) {
+        persistNotifiedEventKey(beKey, notifiedEventKeysRef.current);
 
         const updatedWithBe: AISignal = {
           ...currentSig,
@@ -1057,18 +1227,39 @@ export default function App() {
         // Sound & Notifications
         notificationService.sendBeTriggeredNotification(currentSig, livePrice, Math.round(runningPips));
 
+        const beNotifId = `notif-live-be-trig-${currentSig.id}-${Date.now()}`;
+        const beNotif: MobileNotification = {
+          id: beNotifId,
+          title: `🛡️ KUNCI BE AKTIF: ${currentSig.signalType} XAUUSD (+${Math.round(runningPips)} Pips)`,
+          body: `Harga running mencapai $${livePrice.toFixed(2)}. Stop Loss otomatis digeser ke Entry ($${entry.toFixed(2)}) untuk mengunci posisi bebas risiko 0!`,
+          time: formatWibTime(Date.now()),
+          timestampMs: Date.now(),
+          type: "BREAKEVEN",
+          params: {
+            action: currentSig.signalType.includes("BUY") ? "BUY" : "SELL",
+            entry,
+            sl: entry,
+            tp: currentSig.takeProfit1,
+            lot: 0.1,
+          },
+          read: false,
+          signalId: currentSig.id,
+          pips: Math.round(runningPips),
+        };
+        setLiveEventNotifications((prev) => [beNotif, ...prev]);
+
         const beToast: SignalToastItem = {
           id: `toast-be-trig-${Date.now()}`,
           signal: updatedWithBe,
           timeframe: currentSig.timeframe || "H1",
           createdAt: Date.now(),
-          durationMs: 14000,
+          durationMs: 8000,
           alertType: "BE_TRIGGERED",
           customTitle: `🛡️ PASANG BE (BREAK EVEN) +30 PIPS`,
           customBody: `XAU/USD sudah running +${Math.round(runningPips)} pips di $${livePrice.toFixed(2)}. SL otomatis dipindah ke Entry ($${entry.toFixed(2)})!`,
           pips: Math.round(runningPips),
         };
-        setSignalToasts((prev) => [beToast, ...prev.slice(0, 1)]);
+        pushToastAlert(beToast);
 
         setSignalsList((prevList) =>
           prevList.map((s) => (s.id === currentSig.id ? updatedWithBe : s))
@@ -1150,8 +1341,8 @@ export default function App() {
 
     if (targetHit) {
       const hitKey = `${currentSig.id}_${targetHit}`;
-      if (!notifiedHitKeysRef.current.has(hitKey)) {
-        notifiedHitKeysRef.current.add(hitKey);
+      if (!notifiedEventKeysRef.current.has(hitKey)) {
+        persistNotifiedEventKey(hitKey, notifiedEventKeysRef.current);
 
         const newSignalStatus: AISignal["signalStatus"] =
           targetHit === "TP1"
@@ -1190,13 +1381,50 @@ export default function App() {
           Math.abs(pips)
         );
 
+        // Append to real-time notification hub feed
+        const hitNotifId = `notif-live-hit-${currentSig.id}-${targetHit}-${Date.now()}`;
+        const hitNotif: MobileNotification = {
+          id: hitNotifId,
+          title:
+            targetHit === "TP1"
+              ? `🎯 TP1 HIT (+${pips} PIPS) · TETAP RUNNING`
+              : targetHit === "TP2" || targetHit === "TP3"
+              ? `🎯 ${targetHit} HIT (+${pips} PIPS) · RUNNING`
+              : targetHit === "TP4"
+              ? `🏆 TP4 HIT (+${pips} PIPS) · FULL TARGET CLOSED`
+              : targetHit === "SL"
+              ? `🛑 STOP LOSS HIT (${pips} PIPS)`
+              : `⚖️ BREAK EVEN HIT (0 PIPS - BEBAS RISIKO)`,
+          body:
+            targetHit === "SL"
+              ? `XAU/USD ${currentSig.signalType} menyentuh batas SL di $${livePrice.toFixed(2)}. Risiko dibatasi.`
+              : targetHit === "BE"
+              ? `XAU/USD ${currentSig.signalType} kembali ke harga Entry $${livePrice.toFixed(2)}. Posisi impas aman.`
+              : `XAU/USD ${currentSig.signalType} sukses menyentuh $${livePrice.toFixed(2)}. Profit diamankan +${pips} pips.`,
+          time: formatWibTime(Date.now()),
+          timestampMs: Date.now(),
+          type: targetHit === "SL" ? "SL_HIT" : targetHit === "BE" ? "BREAKEVEN" : "TP_HIT",
+          params: {
+            action: currentSig.signalType.includes("BUY") ? "BUY" : "SELL",
+            entry: currentSig.entryPrice,
+            sl: currentSig.stopLoss,
+            tp: livePrice,
+            lot: 0.1,
+            pnl: pips * 10,
+          },
+          read: false,
+          signalId: currentSig.id,
+          pips,
+        };
+        setLiveEventNotifications((prev) => [hitNotif, ...prev]);
+
         // Trigger In-App Floating Toast Alert
         const hitToast: SignalToastItem = {
           id: `toast-hit-${Date.now()}`,
           signal: updatedSignal,
           timeframe: currentSig.timeframe || "H1",
           createdAt: Date.now(),
-          durationMs: 14000,
+          durationMs: 8000,
           alertType:
             targetHit === "SL"
               ? "SL_HIT"
@@ -1217,7 +1445,7 @@ export default function App() {
             : `XAU/USD ${currentSig.signalType} mencapai target di $${livePrice.toFixed(2)}`,
           pips,
         };
-        setSignalToasts((prev) => [hitToast, ...prev.slice(0, 1)]);
+        pushToastAlert(hitToast);
 
         // Update signalsList for the active item
         setSignalsList((prevList) =>
@@ -1338,6 +1566,7 @@ export default function App() {
           <HomeDashboardView
             onOpenNotifications={() => setIsNotifHubOpen(true)}
             onOpenSettings={() => setIsExnessModalOpen(true)}
+            unreadNotifCount={unreadNotifCount}
             onNavigateToTab={(tab) => {
               setSelectedSignal(null);
               setActiveNavTab(tab);
@@ -1498,47 +1727,18 @@ export default function App() {
         }}
       />
 
-      {/* Notification Hub Modal */}
-      {isNotifHubOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
-          <div className="bg-[#0e1322] border border-slate-800 rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-white text-base">Notifikasi & Riwayat Alert</h3>
-              <button
-                onClick={() => setIsNotifHubOpen(false)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="space-y-2.5">
-              {signalsList.map((sig) => (
-                <div
-                  key={sig.id}
-                  onClick={() => {
-                    handleSelectSignalForDetail(sig);
-                    setIsNotifHubOpen(false);
-                  }}
-                  className="p-3 bg-slate-900/80 hover:bg-slate-800/80 rounded-2xl border border-slate-800 cursor-pointer flex items-center justify-between"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold ${sig.signalType.includes("BUY") ? "text-emerald-400" : "text-rose-400"}`}>
-                        {sig.signalType} {sig.symbol}
-                      </span>
-                      <span className="text-[10px] text-slate-400">{sig.timestamp}</span>
-                    </div>
-                    <p className="text-xs text-slate-300 mt-0.5">
-                      Entry @{sig.entryPrice} | SL: {sig.stopLoss} | TP1: {sig.takeProfit1}
-                    </p>
-                  </div>
-                  <span className="text-xs text-amber-400 font-bold">Detail →</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Signal Notification & History Alert Modal */}
+      <SignalNotificationModal
+        isOpen={isNotifHubOpen}
+        onClose={() => setIsNotifHubOpen(false)}
+        notifications={notifications}
+        signalsList={signalsList}
+        onSelectSignal={handleSelectSignalForDetail}
+        onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+        onClearNotifications={handleClearNotifications}
+        pushNotificationEnabled={pushNotificationEnabled}
+        onRequestPushNotification={handleRequestPushNotification}
+      />
     </div>
   );
 }

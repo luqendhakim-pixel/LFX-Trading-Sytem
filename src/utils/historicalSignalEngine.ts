@@ -65,7 +65,7 @@ export function generateHistoricalSignalsFromCandles(
   // confirmClose: false allows real-time signal trigger right on the bar as the green/red line appears!
   const tssResult = calculateTrendStateStrategy(candles, {
     ...defaultTSSConfig,
-    sourceType: "Close",
+    sourceType: "Custom",
     confirmClose: false,
     ...config,
   });

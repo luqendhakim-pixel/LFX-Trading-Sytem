@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import webpush from "web-push";
 import { generateHistoricalSignalsFromCandles } from "../src/utils/historicalSignalEngine";
+import { HISTORICAL_SIGNALS_09_10 } from "./historicalSignals0910";
 
 export interface AISignalServer {
   id: string;
@@ -179,14 +180,14 @@ export function addPushSubscription(sub: any): boolean {
   return true;
 }
 
-export async function broadcastPushNotification(title: string, body: string, dataUrl: string = "/") {
+export async function broadcastPushNotification(title: string, body: string, dataUrl: string = "/", tag?: string) {
   if (pushSubscriptions.length === 0) return;
   const payload = JSON.stringify({
     title,
     body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    tag: `lfx-push-${Date.now()}`,
+    tag: tag || `lfx-push-${Date.now()}`,
     vibrate: [300, 100, 300, 100, 400],
     data: { url: dataUrl },
   });
@@ -609,6 +610,7 @@ function createInitialHistorySignals(currentSpotPrice: number = 4405.5): AISigna
       pipsTp3: 150,
       pipsTp4: 200,
     },
+    ...HISTORICAL_SIGNALS_09_10,
   ];
 }
 
@@ -784,6 +786,7 @@ class SignalEngineServer {
   private state: SignalServerState;
   private isProcessingTick = false;
   private lastEvaluatedPrice = 0;
+  private notifiedEventKeys = new Set<string>();
 
   constructor() {
     this.state = this.loadStateFromDisk();
@@ -798,15 +801,48 @@ class SignalEngineServer {
         const raw = fs.readFileSync(STATE_FILE, "utf-8");
         const parsed: SignalServerState = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.signalsList)) {
+          // Pre-populate notified event keys from existing notifications
+          if (Array.isArray(parsed.recentNotifications)) {
+            for (const n of parsed.recentNotifications) {
+              if (n.id) this.notifiedEventKeys.add(n.id);
+              this.notifiedEventKeys.add(`${n.type}_${n.title}`);
+            }
+          }
+
           // Pastikan sinyal aktif valid
           if (
             !parsed.currentSignal ||
-            parsed.currentSignal.status !== "ACTIVE" ||
             parsed.currentSignal.entryPrice === 4500 ||
             isNaN(parsed.currentSignal.entryPrice)
           ) {
             console.log(`[SignalEngineServer] Activating TradingView baseline SELL @ 4413.50`);
             parsed.currentSignal = createTradingViewSellSignal(4413.50);
+          }
+
+          // Pre-populate keys for already achieved targets of current signal
+          if (parsed.currentSignal) {
+            const curId = parsed.currentSignal.id;
+            if (parsed.currentSignal.isBreakevenSet) {
+              this.notifiedEventKeys.add(`be_trig_${curId}`);
+            }
+            if (parsed.currentSignal.signalStatus?.includes("TP1")) {
+              this.notifiedEventKeys.add(`tp_hit_TP1_${curId}`);
+            }
+            if (parsed.currentSignal.signalStatus?.includes("TP2")) {
+              this.notifiedEventKeys.add(`tp_hit_TP1_${curId}`);
+              this.notifiedEventKeys.add(`tp_hit_TP2_${curId}`);
+            }
+            if (parsed.currentSignal.signalStatus?.includes("TP3")) {
+              this.notifiedEventKeys.add(`tp_hit_TP1_${curId}`);
+              this.notifiedEventKeys.add(`tp_hit_TP2_${curId}`);
+              this.notifiedEventKeys.add(`tp_hit_TP3_${curId}`);
+            }
+            if (parsed.currentSignal.signalStatus?.includes("TP4")) {
+              this.notifiedEventKeys.add(`tp_hit_TP1_${curId}`);
+              this.notifiedEventKeys.add(`tp_hit_TP2_${curId}`);
+              this.notifiedEventKeys.add(`tp_hit_TP3_${curId}`);
+              this.notifiedEventKeys.add(`tp_hit_TP4_${curId}`);
+            }
           }
 
           // Pertahankan status target hit yang sudah dicapai jika ada
@@ -863,6 +899,13 @@ class SignalEngineServer {
             cleanSignalsList.push(remainingHist);
           }
 
+          // Pastikan sinyal riwayat tanggal 09 & 10 September 2026 selalu terisi lengkap dan tidak hilang
+          for (const sig0910 of HISTORICAL_SIGNALS_09_10) {
+            if (!cleanSignalsList.some((s) => s.id === sig0910.id)) {
+              cleanSignalsList.push(sig0910);
+            }
+          }
+
           if (!completedBuyIncluded) {
             cleanSignalsList.push(completedBuy);
           }
@@ -871,7 +914,24 @@ class SignalEngineServer {
             cleanSignalsList.unshift(parsed.currentSignal);
           }
 
-          parsed.signalsList = cleanSignalsList;
+          const sortedList = cleanSignalsList.sort((a, b) => b.createdAt - a.createdAt);
+          parsed.signalsList = sortedList.map((s, index) => {
+            if (index === 0) return s;
+            if (s.status === "ACTIVE") {
+              return {
+                ...s,
+                status: "COMPLETED" as const,
+                signalStatus: s.signalStatus === "ACTIVE" ? (s.realizedPips && s.realizedPips > 0 ? "TP1 HIT" : "BREAK EVEN") : s.signalStatus,
+                closeResult: (s.closeResult || (s.realizedPips && s.realizedPips > 0 ? "WIN" : "BE")) as any,
+              };
+            }
+            return s;
+          });
+
+          if (parsed.signalsList.length > 0) {
+            parsed.currentSignal = parsed.signalsList[0];
+          }
+
           parsed.stats = this.calculateStatsFromSignals(parsed.signalsList);
           this.saveStateToDisk(parsed);
 
@@ -949,16 +1009,31 @@ class SignalEngineServer {
   public syncFromTradingViewEngine(signal: AISignalServer, list?: AISignalServer[]) {
     if (!signal) return;
 
-    // If current signal is already the same active signal, preserve its live tracking state (e.g. BE or TP flags)
+    // If current signal is already the same active trade setup, preserve its live tracking state (BE, TP, SL, or COMPLETED)
     const current = this.state.currentSignal;
-    const isSameActive =
+    const isSameTradeSetup =
       current &&
-      current.status === "ACTIVE" &&
-      Math.abs(current.entryPrice - signal.entryPrice) < 0.15 &&
-      current.signalType === signal.signalType;
+      (current.id === signal.id ||
+        (current.signalType === signal.signalType &&
+          Math.abs(current.entryPrice - signal.entryPrice) < 1.0));
 
-    if (!isSameActive) {
-      console.log(`[SignalEngineServer] Syncing TradingView signal: ${signal.signalType} @ ${signal.entryPrice}`);
+    if (isSameTradeSetup) {
+      this.state.currentSignal = {
+        ...signal,
+        ...current,
+        // Preserve authoritative live tracking state
+        status: current.status,
+        signalStatus: current.signalStatus !== "ACTIVE" ? current.signalStatus : signal.signalStatus,
+        isBreakevenSet: current.isBreakevenSet || signal.isBreakevenSet,
+        effectiveStopLoss: current.effectiveStopLoss || signal.effectiveStopLoss,
+        realizedPips: current.realizedPips !== undefined ? current.realizedPips : signal.realizedPips,
+        closeResult: current.closeResult || signal.closeResult,
+        closePrice: current.closePrice || signal.closePrice,
+        closedAt: current.closedAt || signal.closedAt,
+        exitReason: current.exitReason || signal.exitReason,
+      };
+    } else {
+      console.log(`[SignalEngineServer] Syncing new TradingView signal: ${signal.signalType} @ ${signal.entryPrice}`);
       this.state.currentSignal = signal;
     }
 
@@ -985,7 +1060,27 @@ class SignalEngineServer {
     if (this.state.currentSignal) {
       mergedMap.set(this.state.currentSignal.id, this.state.currentSignal);
     }
-    this.state.signalsList = Array.from(mergedMap.values()).sort((a, b) => b.createdAt - a.createdAt);
+    const sorted = Array.from(mergedMap.values()).sort((a, b) => b.createdAt - a.createdAt);
+    // HANYA sinyal pertama (paling baru / index 0) yang boleh berstatus ACTIVE
+    // Semua sinyal sebelumnya (index >= 1) WAJIB berstatus COMPLETED
+    this.state.signalsList = sorted.map((s, index) => {
+      if (index === 0) {
+        return s;
+      }
+      if (s.status === "ACTIVE") {
+        return {
+          ...s,
+          status: "COMPLETED" as const,
+          signalStatus: s.signalStatus === "ACTIVE" ? (s.realizedPips && s.realizedPips > 0 ? "TP1 HIT" : "BREAK EVEN") : s.signalStatus,
+          closeResult: (s.closeResult || (s.realizedPips && s.realizedPips > 0 ? "WIN" : "BE")) as any,
+        };
+      }
+      return s;
+    });
+
+    if (this.state.signalsList.length > 0) {
+      this.state.currentSignal = this.state.signalsList[0];
+    }
     this.state.stats = this.calculateStatsFromSignals(this.state.signalsList);
     this.saveStateToDisk();
   }
@@ -995,7 +1090,7 @@ class SignalEngineServer {
     if (!candles || candles.length < 15) return;
     try {
       const livePrice = spotPrice || this.lastEvaluatedPrice || (candles[candles.length - 1]?.close ?? 4400.0);
-      const result = generateHistoricalSignalsFromCandles(candles, "M5", livePrice);
+      const result = generateHistoricalSignalsFromCandles(candles, "M5", livePrice, { sourceType: "Custom" });
       if (result && result.signalsList && result.signalsList.length > 0) {
         const topSignal = (result.currentSignal || result.signalsList[0]) as unknown as AISignalServer;
         this.syncFromTradingViewEngine(topSignal, result.signalsList as unknown as AISignalServer[]);
@@ -1048,7 +1143,7 @@ class SignalEngineServer {
       this.lastEvaluatedPrice = livePrice;
       const current = this.state.currentSignal;
 
-      if (!current || current.status !== "ACTIVE") {
+      if (!current || current.status !== "ACTIVE" || current.signalStatus === "SL HIT" || current.signalStatus === "BREAK EVEN") {
         return;
       }
 
@@ -1072,17 +1167,21 @@ class SignalEngineServer {
           current.signalStatus = "BE SET (+30p)";
         }
 
-        const notif = {
-          id: `notif-${Date.now()}`,
-          type: "BE_TRIGGERED" as const,
-          title: `🛡️ PASANG BE (BREAK EVEN): ${current.signalType} XAU/USD`,
-          body: `Harga mencapai $${livePrice.toFixed(2)} (+${Math.round(runningPips)} pips). SL otomatis dikunci di Entry ($${entry.toFixed(2)})! Bebas risiko!`,
-          timestamp: Date.now(),
-        };
-        this.state.recentNotifications = [notif, ...this.state.recentNotifications.slice(0, 19)];
-        this.saveStateToDisk();
-        broadcastPushNotification(notif.title, notif.body);
-        console.log(`[SignalEngineServer] Signal ${current.id} reached +30p, BE LOCKED.`);
+        const beKey = `be_trig_${current.id}`;
+        if (!this.notifiedEventKeys.has(beKey)) {
+          this.notifiedEventKeys.add(beKey);
+          const notif = {
+            id: `notif-${Date.now()}`,
+            type: "BE_TRIGGERED" as const,
+            title: `🛡️ PASANG BE (BREAK EVEN): ${current.signalType} XAU/USD`,
+            body: `Harga mencapai $${livePrice.toFixed(2)} (+${Math.round(runningPips)} pips). SL otomatis dikunci di Entry ($${entry.toFixed(2)})! Bebas risiko!`,
+            timestamp: Date.now(),
+          };
+          this.state.recentNotifications = [notif, ...this.state.recentNotifications.slice(0, 19)];
+          this.saveStateToDisk();
+          broadcastPushNotification(notif.title, notif.body, "/", `be-trig-${current.id}`);
+          console.log(`[SignalEngineServer] Signal ${current.id} reached +30p, BE LOCKED.`);
+        }
       }
 
       // 2. Check Stop Loss or Break Even Hit
@@ -1204,6 +1303,10 @@ class SignalEngineServer {
   }
 
   private sendBeHitNotif(sig: AISignalServer, price: number) {
+    const key = `be_hit_${sig.id}`;
+    if (this.notifiedEventKeys.has(key)) return;
+    this.notifiedEventKeys.add(key);
+
     const notif = {
       id: `notif-${Date.now()}`,
       type: "BE_HIT" as const,
@@ -1213,10 +1316,14 @@ class SignalEngineServer {
     };
     this.state.recentNotifications = [notif, ...this.state.recentNotifications.slice(0, 19)];
     this.saveStateToDisk();
-    broadcastPushNotification(notif.title, notif.body);
+    broadcastPushNotification(notif.title, notif.body, "/", `be-hit-${sig.id}`);
   }
 
   private sendSlHitNotif(sig: AISignalServer, price: number) {
+    const key = `sl_hit_${sig.id}`;
+    if (this.notifiedEventKeys.has(key)) return;
+    this.notifiedEventKeys.add(key);
+
     const notif = {
       id: `notif-${Date.now()}`,
       type: "SL_HIT" as const,
@@ -1226,10 +1333,14 @@ class SignalEngineServer {
     };
     this.state.recentNotifications = [notif, ...this.state.recentNotifications.slice(0, 19)];
     this.saveStateToDisk();
-    broadcastPushNotification(notif.title, notif.body);
+    broadcastPushNotification(notif.title, notif.body, "/", `sl-hit-${sig.id}`);
   }
 
   private sendHitNotif(target: "TP1" | "TP2" | "TP3" | "TP4", sig: AISignalServer, price: number, pips: number) {
+    const key = `tp_hit_${target}_${sig.id}`;
+    if (this.notifiedEventKeys.has(key)) return;
+    this.notifiedEventKeys.add(key);
+
     const notif = {
       id: `notif-${Date.now()}`,
       type: "TP_HIT" as const,
@@ -1239,7 +1350,7 @@ class SignalEngineServer {
     };
     this.state.recentNotifications = [notif, ...this.state.recentNotifications.slice(0, 19)];
     this.saveStateToDisk();
-    broadcastPushNotification(notif.title, notif.body);
+    broadcastPushNotification(notif.title, notif.body, "/", `tp-hit-${target}-${sig.id}`);
   }
 }
 

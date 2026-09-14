@@ -25,6 +25,10 @@ interface DailyWinRateCalendarPickerProps {
   signalsList: AISignal[];
   isOpen: boolean;
   onClose: () => void;
+  positionClass?: string;
+  title?: string;
+  subtitle?: string;
+  resetLabel?: string;
 }
 
 export const DailyWinRateCalendarPicker: React.FC<DailyWinRateCalendarPickerProps> = ({
@@ -33,6 +37,10 @@ export const DailyWinRateCalendarPicker: React.FC<DailyWinRateCalendarPickerProp
   signalsList,
   isOpen,
   onClose,
+  positionClass,
+  title = "Pilih Kalender Harian",
+  subtitle = "Analisis Winrate & Pips per tanggal spesifik",
+  resetLabel = "Reset (Semua Tanggal)",
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const todayKey = useMemo(() => toDateKey(new Date()), []);
@@ -131,7 +139,10 @@ export const DailyWinRateCalendarPicker: React.FC<DailyWinRateCalendarPickerProp
     <div
       ref={containerRef}
       id="daily-calendar-popover"
-      className="absolute right-0 top-full mt-2 z-50 w-80 sm:w-88 p-4 rounded-2xl bg-[#080e1e] border border-cyan-500/40 shadow-2xl backdrop-blur-xl text-slate-100 animate-scaleUp"
+      className={
+        positionClass ||
+        "absolute right-0 top-full mt-2 z-50 w-80 sm:w-88 p-4 rounded-2xl bg-[#080e1e] border border-cyan-500/40 shadow-2xl backdrop-blur-xl text-slate-100 animate-scaleUp"
+      }
       style={{ boxShadow: "0 20px 40px -10px rgba(0,0,0,0.8), 0 0 25px -5px rgba(6,182,212,0.25)" }}
     >
       {/* Header */}
@@ -141,8 +152,8 @@ export const DailyWinRateCalendarPicker: React.FC<DailyWinRateCalendarPickerProp
             <CalendarDays className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-xs font-black text-white tracking-wide">Pilih Kalender Harian</h4>
-            <p className="text-[10px] text-slate-400">Analisis Winrate & Pips per tanggal spesifik</p>
+            <h4 className="text-xs font-black text-white tracking-wide">{title}</h4>
+            <p className="text-[10px] text-slate-400">{subtitle}</p>
           </div>
         </div>
         <button
@@ -163,7 +174,7 @@ export const DailyWinRateCalendarPicker: React.FC<DailyWinRateCalendarPickerProp
               className="text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer font-normal"
             >
               <RotateCcw className="w-2.5 h-2.5" />
-              <span>Reset (24 Jam)</span>
+              <span>{resetLabel}</span>
             </button>
           )}
         </div>

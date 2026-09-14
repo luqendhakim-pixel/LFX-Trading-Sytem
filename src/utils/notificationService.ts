@@ -335,7 +335,7 @@ class NotificationService {
     const tp2Pips = signal.pipsTp2 || 100;
     const title = `🚨 SINYAL BARU: ${signal.signalType} ${signal.symbol || "XAUUSD"}`;
     const body = `Entry: $${Number(signal.entryPrice).toFixed(2)} | SL: $${Number(signal.stopLoss).toFixed(2)} (${slPips}p) | TP1: $${Number(signal.takeProfit1).toFixed(2)} (+${tp1Pips}p) | TP2: $${Number(signal.takeProfit2).toFixed(2)} (+${tp2Pips}p)`;
-    this.sendMobilePush(title, { body, tag: `signal-${signal.id}-${Date.now()}` });
+    this.sendMobilePush(title, { body, tag: `lfx-sig-${signal.id}` });
   }
 
   // 2. Break Even Trigger Notification (+30 Pips)

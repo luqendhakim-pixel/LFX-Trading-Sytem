@@ -22,14 +22,12 @@ import {
   BarChart3,
   CheckCircle2,
   XCircle,
-  Layers,
 } from "lucide-react";
 import { AISignal, Timeframe, UserProfile, Candle } from "../types";
 import { TradingViewWidget } from "./TradingViewWidget";
 import { LfxLogo } from "./LfxLogo";
 import { SignalWinRateHistoryModal } from "./SignalWinRateHistoryModal";
 import { EconomicNewsCalendar } from "./EconomicNewsCalendar";
-import { MultiTimeframeConfluenceGrid } from "./MultiTimeframeConfluenceGrid";
 import { DailyWinRateCalendarPicker } from "./DailyWinRateCalendarPicker";
 import {
   calculateDynamicHistoryWinRate,
@@ -55,6 +53,7 @@ interface HomeDashboardViewProps {
   onOpenContestModal: () => void;
   onRequestPushNotification: () => void;
   pushNotificationEnabled: boolean;
+  unreadNotifCount?: number;
   currentUser?: UserProfile | null;
   onOpenAuthModal?: () => void;
 }
@@ -74,6 +73,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   onOpenContestModal,
   onRequestPushNotification,
   pushNotificationEnabled,
+  unreadNotifCount = 0,
   currentUser,
   onOpenAuthModal,
 }) => {
@@ -166,11 +166,14 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
             id="btn-top-notif"
             onClick={onOpenNotifications}
             className="relative p-2 rounded-xl bg-[#0e1529] border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition cursor-pointer"
-            title="Notifikasi Sinyal"
+            title="Notifikasi & Riwayat Alert Sinyal"
           >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full animate-ping"></span>
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
+            {unreadNotifCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-500 text-[10px] font-black text-white rounded-full flex items-center justify-center border-2 border-[#080d1a] shadow-md shadow-rose-950/60 animate-pulse font-mono">
+                {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+              </span>
+            )}
           </button>
 
           {/* Settings Button - Only displayed for ADMIN */}
@@ -536,14 +539,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
             </div>
           )}
 
-          {/* 5. Matrix Konfluensi Multi-Timeframe (M1 - D1 Grid) */}
-          <MultiTimeframeConfluenceGrid
-            currentPrice={currentPrice}
-            selectedTimeframe={activeTf}
-            onSelectTimeframe={(tf) => onSelectTimeframe?.(tf)}
-          />
-
-          {/* 6. Section: Signal Terbaru */}
+          {/* Section: Signal Terbaru */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-sm font-black text-slate-200">Signal Terbaru</h3>

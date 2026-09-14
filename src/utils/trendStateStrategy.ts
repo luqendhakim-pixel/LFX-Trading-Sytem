@@ -26,7 +26,7 @@ export interface TrendStateConfig {
 }
 
 export const defaultTSSConfig: TrendStateConfig = {
-  sourceType: "Close",
+  sourceType: "Custom",
   length: 5,
   multiplier: 2.0,
   offset: 0.5,

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Sliders,
   TrendingUp,
@@ -12,9 +12,19 @@ import {
   Clock,
   Radio,
   History,
+  Calendar,
+  RotateCcw,
+  X,
 } from "lucide-react";
 import { AISignal } from "../types";
 import { getTradingSessionName } from "../utils/sessionHelper";
+import { DailyWinRateCalendarPicker } from "./DailyWinRateCalendarPicker";
+import {
+  formatDateKeyToIndo,
+  getSignalDateKey,
+  calculateWinRateForDate,
+  toDateKey,
+} from "../utils/winratePipsCalculator";
 
 interface SignalsListViewProps {
   signalsList: AISignal[];
@@ -37,6 +47,14 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
 }) => {
   const [filterType, setFilterType] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+  const [isCalendarOpen, setIsCalendarOpen] = useState<boolean>(false);
+
+  const todayKey = useMemo(() => toDateKey(new Date()), []);
+  const selectedDateMetrics = useMemo(() => {
+    if (!selectedDateKey) return null;
+    return calculateWinRateForDate(signalsList, selectedDateKey);
+  }, [signalsList, selectedDateKey]);
 
   const filterTabs = [
     { id: "ALL", label: "Semua Sinyal" },
@@ -139,6 +157,12 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
 
   const seenLive = new Set<string>();
   const filteredSignals = signalsList.filter((sig) => {
+    // Filter dinamis berdasarkan tanggal kalender jika dipilih
+    if (selectedDateKey) {
+      const sigDateKey = getSignalDateKey(sig);
+      if (sigDateKey !== selectedDateKey) return false;
+    }
+
     const isLive = sig.status === "ACTIVE";
     const status = sig.signalStatus || (isLive ? "ACTIVE" : "CLOSED");
 
@@ -178,35 +202,35 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
       className="w-full max-w-full lg:max-w-7xl xl:max-w-[1600px] mx-auto pb-28 pt-2 px-2 sm:px-4 md:px-6 text-slate-100 space-y-4 sm:space-y-5 animate-fadeIn"
     >
       {/* Top Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-cyan-400" />
-            <span>Signal Real-time XAU/USD</span>
+            <Sliders className="w-5 h-5 text-cyan-400 shrink-0" />
+            <span className="whitespace-nowrap">Signal Real-time XAU/USD</span>
           </h2>
-          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-            Hanya 1 posisi aktif berjalan. Sinyal lama otomatis masuk riwayat (Closed).
-          </p>
         </div>
 
         {/* Actions & Radar Indicator */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {onRefreshScan && (
             <button
               onClick={onRefreshScan}
               disabled={isScanning}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0"
               title="Hitung Ulang Sinyal & Riwayat dari Awal Data Candle"
             >
-              <Zap className={`w-3.5 h-3.5 ${isScanning ? "animate-spin text-amber-400" : "text-cyan-400"}`} />
-              <span className="hidden sm:inline">{isScanning ? "Menghitung..." : "Sinkron TradingView"}</span>
+              <Zap className={`w-3.5 h-3.5 shrink-0 ${isScanning ? "animate-spin text-amber-400" : "text-cyan-400"}`} />
+              <span className="whitespace-nowrap">{isScanning ? "Menghitung..." : "Sinkron TradingView"}</span>
             </button>
           )}
 
           {/* Real-time Radar Status Indicator */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-bold shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>Radar Live Aktif</span>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-bold shadow-sm whitespace-nowrap shrink-0">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+            </span>
+            <span className="whitespace-nowrap">Radar Live Aktif</span>
           </div>
         </div>
       </div>
@@ -237,7 +261,11 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
       )}
 
       {/* SECTION 1: PROMINENT ACTIVE LIVE SIGNAL CARD */}
-      {activeSignal && filterType !== "TP_WIN" && filterType !== "HIT_BE" && filterType !== "SL_HIT" && (
+      {activeSignal &&
+        filterType !== "TP_WIN" &&
+        filterType !== "HIT_BE" &&
+        filterType !== "SL_HIT" &&
+        (!selectedDateKey || selectedDateKey === todayKey) && (
         <div className="space-y-2">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-1.5 text-xs font-black text-emerald-400 uppercase tracking-wider">
@@ -371,13 +399,76 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
       )}
 
       {/* SECTION 2: SEARCH & FILTER TABS */}
-      <div className="space-y-2 pt-2">
-        <div className="flex items-center justify-between">
+      <div className="space-y-2.5 pt-2 relative">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
             <History className="w-3.5 h-3.5 text-cyan-400" />
             <span>Daftar Sinyal & Riwayat Selesai</span>
           </div>
+
+          <div className="flex items-center gap-2">
+            {selectedDateKey && (
+              <button
+                onClick={() => setSelectedDateKey(null)}
+                className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 font-medium cursor-pointer"
+                title="Tampilkan riwayat dari semua tanggal"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span className="hidden sm:inline">Semua Tanggal</span>
+              </button>
+            )}
+
+            {/* Tombol Kalender di Atas Sesuai Tanda Kotak Merah User */}
+            <button
+              id="signals-history-calendar-btn"
+              type="button"
+              onClick={() => setIsCalendarOpen((prev) => !prev)}
+              className={`px-2.5 py-1 sm:px-3 sm:py-1 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 border shrink-0 ${
+                selectedDateKey
+                  ? "bg-gradient-to-r from-cyan-500/30 via-emerald-500/25 to-cyan-500/30 text-cyan-200 border-cyan-400 font-black shadow-md shadow-cyan-950/40"
+                  : isCalendarOpen
+                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/60"
+                  : "bg-[#0b1021] text-slate-300 hover:text-cyan-300 border-slate-800 hover:border-cyan-500/40"
+              }`}
+              title="Pilih Kalender Riwayat Sinyal"
+            >
+              <Calendar className={`w-3.5 h-3.5 ${selectedDateKey ? "text-cyan-300" : "text-cyan-400"}`} />
+              <span>
+                {selectedDateKey
+                  ? formatDateKeyToIndo(selectedDateKey)
+                  : "Kalender"}
+              </span>
+              {selectedDateKey && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedDateKey(null);
+                  }}
+                  className="ml-0.5 p-0.5 rounded-full hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                  title="Hapus filter tanggal (Tampilkan Semua)"
+                >
+                  <X className="w-3 h-3" />
+                </span>
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* Daily Winrate Calendar Popover Dropdown */}
+        <DailyWinRateCalendarPicker
+          isOpen={isCalendarOpen}
+          onClose={() => setIsCalendarOpen(false)}
+          selectedDateKey={selectedDateKey}
+          onSelectDate={(dateKey) => {
+            setSelectedDateKey(dateKey);
+            setIsCalendarOpen(false);
+          }}
+          signalsList={signalsList}
+          positionClass="absolute right-0 top-10 z-50 w-[94vw] max-w-sm sm:w-88 p-4 rounded-2xl bg-[#080e1e] border border-cyan-500/40 shadow-2xl backdrop-blur-xl text-slate-100 animate-scaleUp"
+          title="Kalender Riwayat Sinyal"
+          subtitle="Pilih tanggal untuk melihat histori transaksi & winrate"
+          resetLabel="Reset (Semua Tanggal)"
+        />
 
         {/* Search Input */}
         <div className="relative">
@@ -409,13 +500,86 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
             </button>
           ))}
         </div>
+
+        {/* Dynamic Date Filter Indicator & Stats Bar */}
+        {selectedDateKey && (
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-gradient-to-r from-cyan-950/60 via-[#080f22] to-emerald-950/40 border border-cyan-500/40 text-xs animate-fadeIn">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shrink-0">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span className="text-cyan-300 font-black">
+                    Riwayat: {formatDateKeyToIndo(selectedDateKey)}
+                  </span>
+                  {selectedDateMetrics && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-200 font-mono font-bold border border-cyan-500/30">
+                      {filteredSignals.length} dari {selectedDateMetrics.totalClosedSignals} Sinyal
+                    </span>
+                  )}
+                </div>
+                {selectedDateMetrics && (
+                  <div className="text-[11px] text-slate-300 flex items-center gap-2 mt-0.5 font-mono flex-wrap">
+                    <span className="text-emerald-400 font-bold">
+                      Winrate {selectedDateMetrics.winRatePercent}%
+                    </span>
+                    <span className="text-slate-600">•</span>
+                    <span
+                      className={
+                        selectedDateMetrics.netPips >= 0
+                          ? "text-emerald-400 font-bold"
+                          : "text-rose-400 font-bold"
+                      }
+                    >
+                      Net {selectedDateMetrics.netPips >= 0 ? "+" : ""}
+                      {selectedDateMetrics.netPips} Pips
+                    </span>
+                    <span className="text-slate-600">•</span>
+                    <span className="text-slate-400 text-[10px]">
+                      ({selectedDateMetrics.totalHitTpCount}W / {selectedDateMetrics.hitSlCount}L /{" "}
+                      {selectedDateMetrics.hitBeCount}BE)
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSelectedDateKey(null)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-semibold border border-slate-700 transition cursor-pointer shrink-0"
+              title="Kembali ke semua riwayat tanggal"
+            >
+              <RotateCcw className="w-3 h-3 text-cyan-400" />
+              <span>Semua Tanggal</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Signals List Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
         {filteredSignals.length === 0 ? (
-          <div className="col-span-full p-8 text-center bg-[#0b1021] border border-slate-800 rounded-3xl text-slate-400 text-xs">
-            Tidak ada sinyal dengan filter ini.
+          <div className="col-span-full p-8 text-center bg-[#0b1021] border border-slate-800 rounded-3xl text-slate-400 text-xs space-y-2">
+            <div>
+              {selectedDateKey
+                ? `Tidak ada sinyal pada tanggal ${formatDateKeyToIndo(selectedDateKey)} dengan filter "${
+                    filterTabs.find((t) => t.id === filterType)?.label || filterType
+                  }".`
+                : "Tidak ada sinyal dengan filter ini."}
+            </div>
+            {selectedDateKey && (
+              <button
+                onClick={() => {
+                  setSelectedDateKey(null);
+                  setFilterType("ALL");
+                  setSearchQuery("");
+                }}
+                className="px-3 py-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-bold hover:bg-cyan-500/30 transition cursor-pointer"
+              >
+                Reset Filter Tanggal (Tampilkan Semua)
+              </button>
+            )}
           </div>
         ) : (
           filteredSignals.map((sig) => {

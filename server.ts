@@ -823,7 +823,9 @@ async function bootstrapTradingViewSignals() {
     console.warn("[SignalEngineServer] Startup candle bootstrap failed:", e);
   }
 }
-setTimeout(bootstrapTradingViewSignals, 1000);
+// Run immediately on boot, then repeat
+bootstrapTradingViewSignals();
+setInterval(bootstrapTradingViewSignals, 30000);
 
 // ==========================================
 // 📅 REAL-TIME ECONOMIC NEWS CALENDAR API (XAU/USD RED FOLDER NEWS)

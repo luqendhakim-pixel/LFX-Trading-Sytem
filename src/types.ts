@@ -217,6 +217,9 @@ export interface MobileNotification {
     pnl?: number;
   };
   read?: boolean;
+  signalId?: string;
+  pips?: number;
+  timestampMs?: number;
 }
 
 export interface VerificationStats {

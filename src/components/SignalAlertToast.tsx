@@ -47,6 +47,17 @@ export const SignalAlertToast: React.FC<SignalAlertToastProps> = ({
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Auto-dismiss active toasts after durationMs (default 8s)
+  React.useEffect(() => {
+    if (toasts.length === 0) return;
+    const timers = toasts.map((t) =>
+      setTimeout(() => {
+        onDismiss(t.id);
+      }, t.durationMs || 8000)
+    );
+    return () => timers.forEach((tm) => clearTimeout(tm));
+  }, [toasts, onDismiss]);
+
   if (toasts.length === 0) return null;
 
   return (
