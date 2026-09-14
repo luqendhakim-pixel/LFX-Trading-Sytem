@@ -1006,35 +1006,51 @@ class SignalEngineServer {
   }
 
   // Synchronize authoritative TradingView Pine Script strategy signal from client or candle analyzer
-  public syncFromTradingViewEngine(signal: AISignalServer, list?: AISignalServer[]) {
-    if (!signal) return;
+  public syncFromTradingViewEngine(signal: AISignalServer | null, list?: AISignalServer[]) {
+    if (!signal && (!list || list.length === 0)) return;
 
-    // If current signal is already the same active trade setup, preserve its live tracking state (BE, TP, SL, or COMPLETED)
-    const current = this.state.currentSignal;
-    const isSameTradeSetup =
-      current &&
-      (current.id === signal.id ||
-        (current.signalType === signal.signalType &&
-          Math.abs(current.entryPrice - signal.entryPrice) < 1.0));
+    if (signal) {
+      // If current signal is already the same active trade setup, preserve its live tracking state (BE, TP, SL, or COMPLETED)
+      const current = this.state.currentSignal;
+      const isSameTradeSetup =
+        current &&
+        (current.id === signal.id ||
+          (current.signalType === signal.signalType &&
+            Math.abs(current.entryPrice - signal.entryPrice) < 1.0));
 
-    if (isSameTradeSetup) {
-      this.state.currentSignal = {
-        ...signal,
-        ...current,
-        // Preserve authoritative live tracking state
-        status: current.status,
-        signalStatus: current.signalStatus !== "ACTIVE" ? current.signalStatus : signal.signalStatus,
-        isBreakevenSet: current.isBreakevenSet || signal.isBreakevenSet,
-        effectiveStopLoss: current.effectiveStopLoss || signal.effectiveStopLoss,
-        realizedPips: current.realizedPips !== undefined ? current.realizedPips : signal.realizedPips,
-        closeResult: current.closeResult || signal.closeResult,
-        closePrice: current.closePrice || signal.closePrice,
-        closedAt: current.closedAt || signal.closedAt,
-        exitReason: current.exitReason || signal.exitReason,
-      };
-    } else {
-      console.log(`[SignalEngineServer] Syncing new TradingView signal: ${signal.signalType} @ ${signal.entryPrice}`);
-      this.state.currentSignal = signal;
+      if (isSameTradeSetup) {
+        const wasClosed =
+          current.status === "COMPLETED" ||
+          current.signalStatus === "SL HIT" ||
+          current.signalStatus === "BREAK EVEN" ||
+          signal.status === "COMPLETED" ||
+          signal.signalStatus === "SL HIT" ||
+          signal.signalStatus === "BREAK EVEN";
+
+        this.state.currentSignal = {
+          ...signal,
+          ...current,
+          // Preserve authoritative live tracking state: closed trades must stay closed!
+          status: wasClosed ? "COMPLETED" : current.status,
+          signalStatus: wasClosed
+            ? current.signalStatus !== "ACTIVE"
+              ? current.signalStatus
+              : signal.signalStatus
+            : current.signalStatus !== "ACTIVE"
+            ? current.signalStatus
+            : signal.signalStatus,
+          isBreakevenSet: current.isBreakevenSet || signal.isBreakevenSet,
+          effectiveStopLoss: current.effectiveStopLoss || signal.effectiveStopLoss,
+          realizedPips: current.realizedPips !== undefined ? current.realizedPips : signal.realizedPips,
+          closeResult: current.closeResult || signal.closeResult,
+          closePrice: current.closePrice || signal.closePrice,
+          closedAt: current.closedAt || signal.closedAt,
+          exitReason: current.exitReason || signal.exitReason,
+        };
+      } else {
+        console.log(`[SignalEngineServer] Syncing new TradingView signal: ${signal.signalType} @ ${signal.entryPrice}`);
+        this.state.currentSignal = signal;
+      }
     }
 
     const mergedMap = new Map<string, AISignalServer>();
@@ -1061,13 +1077,12 @@ class SignalEngineServer {
       mergedMap.set(this.state.currentSignal.id, this.state.currentSignal);
     }
     const sorted = Array.from(mergedMap.values()).sort((a, b) => b.createdAt - a.createdAt);
-    // HANYA sinyal pertama (paling baru / index 0) yang boleh berstatus ACTIVE
-    // Semua sinyal sebelumnya (index >= 1) WAJIB berstatus COMPLETED
+    // HANYA sinyal berstatus ACTIVE yang masih valid yang boleh aktif
     this.state.signalsList = sorted.map((s, index) => {
-      if (index === 0) {
+      if (index === 0 && (!signal || signal.status === "ACTIVE")) {
         return s;
       }
-      if (s.status === "ACTIVE") {
+      if (s.status === "ACTIVE" && index > 0) {
         return {
           ...s,
           status: "COMPLETED" as const,
@@ -1078,9 +1093,10 @@ class SignalEngineServer {
       return s;
     });
 
-    if (this.state.signalsList.length > 0) {
-      this.state.currentSignal = this.state.signalsList[0];
-    }
+    // Cari sinyal yang benar-benar masih ACTIVE
+    const activeSig = this.state.signalsList.find((s) => s.status === "ACTIVE");
+    this.state.currentSignal = activeSig || null;
+
     this.state.stats = this.calculateStatsFromSignals(this.state.signalsList);
     this.saveStateToDisk();
   }
@@ -1092,7 +1108,7 @@ class SignalEngineServer {
       const livePrice = spotPrice || this.lastEvaluatedPrice || (candles[candles.length - 1]?.close ?? 4400.0);
       const result = generateHistoricalSignalsFromCandles(candles, "M5", livePrice, { sourceType: "Custom" });
       if (result && result.signalsList && result.signalsList.length > 0) {
-        const topSignal = (result.currentSignal || result.signalsList[0]) as unknown as AISignalServer;
+        const topSignal = (result.currentSignal || null) as unknown as AISignalServer | null;
         this.syncFromTradingViewEngine(topSignal, result.signalsList as unknown as AISignalServer[]);
       }
     } catch (e) {

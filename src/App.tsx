@@ -1033,36 +1033,36 @@ export default function App() {
             });
 
             const activeSignalToApply =
-              cleanList.length > 0
-                ? cleanList[0]
-                : serverActive && serverActive.entryPrice !== 4500
+              cleanList.find((s) => s.status === "ACTIVE") ||
+              (serverActive && serverActive.status === "ACTIVE" && serverActive.entryPrice !== 4500
                 ? (serverActive as AISignal)
-                : null;
+                : null);
 
-            if (activeSignalToApply) {
-              setCurrentSignal((prev) => {
-                if (
-                  !prev ||
-                  prev.id !== activeSignalToApply.id ||
-                  prev.signalType !== activeSignalToApply.signalType ||
-                  prev.entryPrice !== activeSignalToApply.entryPrice ||
-                  prev.signalStatus !== activeSignalToApply.signalStatus ||
-                  prev.status !== activeSignalToApply.status ||
-                  prev.isBreakevenSet !== activeSignalToApply.isBreakevenSet
-                ) {
-                  const updatedActive = activeSignalToApply;
-                  setSelectedSignal((prevSel) =>
-                    prevSel && prevSel.id === updatedActive.id ? updatedActive : prevSel
-                  );
+            setCurrentSignal((prev) => {
+              if (!activeSignalToApply) {
+                return null;
+              }
+              if (
+                !prev ||
+                prev.id !== activeSignalToApply.id ||
+                prev.signalType !== activeSignalToApply.signalType ||
+                prev.entryPrice !== activeSignalToApply.entryPrice ||
+                prev.signalStatus !== activeSignalToApply.signalStatus ||
+                prev.status !== activeSignalToApply.status ||
+                prev.isBreakevenSet !== activeSignalToApply.isBreakevenSet
+              ) {
+                const updatedActive = activeSignalToApply;
+                setSelectedSignal((prevSel) =>
+                  prevSel && prevSel.id === updatedActive.id ? updatedActive : prevSel
+                );
 
-                  // Only notify if genuinely a brand new fresh signal and not already running
-                  notifyNewSignalIfEligible(updatedActive, updatedActive.timeframe || "M5");
+                // Only notify if genuinely a brand new fresh signal and not already running
+                notifyNewSignalIfEligible(updatedActive, updatedActive.timeframe || "M5");
 
-                  return updatedActive;
-                }
-                return prev;
-              });
-            }
+                return updatedActive;
+              }
+              return prev;
+            });
           }
         }
       }
@@ -1119,20 +1119,35 @@ export default function App() {
             calculatedActiveSignal.closeResult = activeExisting.closeResult ?? calculatedActiveSignal.closeResult;
           }
 
-          setCurrentSignal(calculatedActiveSignal);
+          setCurrentSignal(calculatedActiveSignal || null);
 
           // Synchronize authoritative TradingView signal with background server engine
           fetch("/api/signals/sync-tradingview", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              currentSignal: calculatedActiveSignal,
+              currentSignal: calculatedActiveSignal || null,
               signalsList: calculatedSignals,
             }),
           }).catch(() => {});
 
           // Only notify if genuinely fresh, eligible, and not yet alerted
-          notifyNewSignalIfEligible(calculatedActiveSignal, activeTf);
+          if (calculatedActiveSignal) {
+            notifyNewSignalIfEligible(calculatedActiveSignal, activeTf);
+          }
+        } else {
+          // If calculatedSignals exist but none are active, clear currentSignal
+          setCurrentSignal(null);
+          if (calculatedSignals && calculatedSignals.length > 0) {
+            fetch("/api/signals/sync-tradingview", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                currentSignal: null,
+                signalsList: calculatedSignals,
+              }),
+            }).catch(() => {});
+          }
         }
       } catch (err) {
         console.error("AI scan error:", err);
@@ -1159,9 +1174,7 @@ export default function App() {
           if (calculatedSignals && calculatedSignals.length > 0) {
             setSignalsList(calculatedSignals);
           }
-          if (calculatedActiveSignal) {
-            setCurrentSignal(calculatedActiveSignal);
-          }
+          setCurrentSignal(calculatedActiveSignal || null);
         }
       } catch (err) {
         console.error("Failed to switch timeframe:", err);
@@ -1359,7 +1372,7 @@ export default function App() {
 
         // Status CLOSED is ONLY triggered when SL is hit or BE is hit
         // TP1, TP2, TP3, and TP4 remain running in live position with full profit lock
-        const isCompleted = targetHit === "SL" || targetHit === "BE";
+        const isCompleted = targetHit === "SL" || targetHit === "BE" || targetHit === "TP4";
         const updatedSignal: AISignal = {
           ...currentSig,
           signalStatus: newSignalStatus,
@@ -1368,10 +1381,21 @@ export default function App() {
           effectiveStopLoss: entry,
           realizedPips: pips,
           closeResult,
+          closePrice: isCompleted
+            ? targetHit === "SL"
+              ? currentSig.stopLoss
+              : targetHit === "BE"
+              ? entry
+              : currentSig.takeProfit4 || livePrice
+            : undefined,
           closedAt: isCompleted ? Date.now() : currentSig.closedAt,
         };
 
-        setCurrentSignal(updatedSignal);
+        if (isCompleted) {
+          setCurrentSignal(null);
+        } else {
+          setCurrentSignal(updatedSignal);
+        }
 
         // Trigger Push & Audio Sound Chime
         notificationService.sendTargetHitNotification(

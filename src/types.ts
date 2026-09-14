@@ -147,6 +147,7 @@ export interface AISignal {
   status?: "ACTIVE" | "TRIGGERED" | "EXPIRED" | "COMPLETED";
   signalStatus?: "ACTIVE" | "BE SET (+30p)" | "TP1 HIT" | "TP2 HIT" | "TP3 HIT" | "TP4 HIT" | "SL HIT" | "BREAK EVEN" | "CLOSED" | (string & {});
   isBreakevenSet?: boolean;
+  isReEntry?: boolean;
   effectiveStopLoss?: number;
   beTriggeredPrice?: number;
   realizedPips?: number;

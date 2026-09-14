@@ -15,6 +15,7 @@ import {
   Calendar,
   RotateCcw,
   X,
+  Activity,
 } from "lucide-react";
 import { AISignal } from "../types";
 import { getTradingSessionName } from "../utils/sessionHelper";
@@ -330,13 +331,24 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
                         : "bg-rose-500 text-white shadow-md shadow-rose-500/20"
                     }`}
                   >
-                    {activeSignal.signalType.includes("BUY") ? "BUY" : "SELL"}
+                    {activeSignal.isReEntry
+                      ? activeSignal.signalType.includes("BUY")
+                        ? "RE-ENTRY BUY"
+                        : "RE-ENTRY SELL"
+                      : activeSignal.signalType.includes("BUY")
+                      ? "BUY"
+                      : "SELL"}
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
                       <span className="text-sm sm:text-base font-black text-white tracking-tight">
                         {activeSignal.symbol || "XAUUSD"}
                       </span>
+                      {activeSignal.isReEntry && (
+                        <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 text-[9px] font-bold border border-cyan-500/30 whitespace-nowrap">
+                          RE-ENTRY
+                        </span>
+                      )}
                       <span className="text-xs font-mono font-bold text-slate-300">
                         @ {!isSubscriptionActive ? "••••••" : activeSignal.entryPrice.toFixed(2)}
                       </span>
@@ -432,6 +444,46 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
         </div>
         );
       })()}
+
+      {/* Standby Card when no active trade is running (last trade hit SL or completed TP4) */}
+      {!activeSignal &&
+        filterType === "ALL" &&
+        (!selectedDateKey || selectedDateKey === todayKey) && (() => {
+          const lastCompleted = signalsList.find((s) => s.status === "COMPLETED");
+          const wasSlHit = lastCompleted?.signalStatus === "SL HIT";
+          const isBuy = lastCompleted?.signalType.includes("BUY");
+          return (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-[#0c152e]/80 via-[#080f22]/90 to-[#070b18] border border-cyan-500/30 shadow-lg relative overflow-hidden">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                    <Activity className="w-4 h-4 animate-pulse text-cyan-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs sm:text-sm font-black text-white whitespace-nowrap">
+                        Radar Standby: Tidak Ada Posisi Berjalan
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-800/90 text-slate-300 border border-slate-700 text-[10px] font-bold font-mono whitespace-nowrap">
+                        FLAT (0 LOT)
+                      </span>
+                      {wasSlHit && lastCompleted && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold whitespace-nowrap">
+                          Syarat Re-Entry: Kembali ke ${lastCompleted.entryPrice.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                      {wasSlHit && lastCompleted
+                        ? `Posisi sebelumnya terkena SL. Re-Entry ${isBuy ? "BUY" : "SELL"} hanya berlaku jika harga kembali ke titik awal garis ${isBuy ? "hijau" : "merah"} pertama kali muncul ($${lastCompleted.entryPrice.toFixed(2)}), atau menunggu pembalikan tren baru.`
+                        : "Sinyal sebelumnya telah mencapai target (TP/BE Selesai). Radar menunggu kemunculan sinyal flip tren berikutnya."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       {/* SECTION 2: SEARCH & FILTER TABS */}
       <div className="space-y-2.5 pt-2 relative">
@@ -656,11 +708,16 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
                         : "bg-rose-950/80 text-rose-400 border border-rose-500/40"
                     }`}
                   >
-                    {isBuy ? "BUY" : "SELL"}
+                    {sig.isReEntry ? (isBuy ? "RE-ENTRY BUY" : "RE-ENTRY SELL") : (isBuy ? "BUY" : "SELL")}
                   </span>
                   <div>
                     <div className="flex items-center gap-1.5">
                       <span className="font-extrabold text-sm text-white">{sig.symbol || "XAUUSD"}</span>
+                      {sig.isReEntry && (
+                        <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 text-[9px] font-bold border border-cyan-500/30 whitespace-nowrap">
+                          RE-ENTRY
+                        </span>
+                      )}
                       {isLive && (
                         <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-black border border-emerald-500/30">
                           LIVE

@@ -72,7 +72,7 @@ export function generateHistoricalSignalsFromCandles(
 
   const { bars } = tssResult;
 
-  // 2. Identify every signal flip along the candle series from beginning
+  // 2. Identify every signal flip and pullback re-entries along the candle series
   interface RawSignalEvent {
     barIndex: number;
     candle: Candle;
@@ -81,9 +81,25 @@ export function generateHistoricalSignalsFromCandles(
     adaptiveRange: number;
     upper: number;
     lower: number;
+    isReEntry?: boolean;
   }
 
   const rawSignals: RawSignalEvent[] = [];
+
+  // Track trade state during simulation across bars
+  let currentSimTrade: {
+    type: "BUY" | "SELL";
+    entryPrice: number;
+    stopLoss: number;
+    takeProfit1: number;
+    takeProfit4: number;
+    hitTp1: boolean;
+    barIndex: number;
+  } | null = null;
+  let lastExitBarIdx = -999;
+  let lastExitReason: "SL" | "TP" | "BE" | "REVERSAL" | null = null;
+  let initialTrendFilterPrice: number | null = null; // Titik awal garis hijau / merah muncul pertama kali
+  let reEntryCount = 0;
 
   for (let i = 1; i < bars.length; i++) {
     const prevTrend = bars[i - 1].trend;
@@ -92,36 +108,152 @@ export function generateHistoricalSignalsFromCandles(
     const isBuyFlip = currTrend === 1 && prevTrend !== 1;
     const isSellFlip = currTrend === -1 && prevTrend !== -1;
 
+    // Check if open simulated trade was closed on this bar
+    if (currentSimTrade) {
+      const isReversal =
+        (currentSimTrade.type === "BUY" && currTrend === -1) ||
+        (currentSimTrade.type === "SELL" && currTrend === 1);
+      if (isReversal) {
+        currentSimTrade = null;
+        lastExitReason = "REVERSAL";
+        lastExitBarIdx = i;
+      } else if (currentSimTrade.type === "BUY") {
+        if (candles[i].high >= currentSimTrade.takeProfit1) currentSimTrade.hitTp1 = true;
+        // Posisi HANYA di-close jika menyentuh Stop Loss (50 pips)
+        if (candles[i].low <= currentSimTrade.stopLoss) {
+          currentSimTrade = null;
+          lastExitReason = "SL";
+          lastExitBarIdx = i;
+        }
+      } else if (currentSimTrade.type === "SELL") {
+        if (candles[i].low <= currentSimTrade.takeProfit1) currentSimTrade.hitTp1 = true;
+        // Posisi HANYA di-close jika menyentuh Stop Loss (50 pips)
+        if (candles[i].high >= currentSimTrade.stopLoss) {
+          currentSimTrade = null;
+          lastExitReason = "SL";
+          lastExitBarIdx = i;
+        }
+      }
+    }
+
     if (isBuyFlip) {
+      const entry = Number(bars[i].filter.toFixed(2));
+      initialTrendFilterPrice = entry; // Titik awal garis hijau muncul pertama kali!
+      lastExitReason = null;
+      reEntryCount = 0;
       rawSignals.push({
         barIndex: i,
         candle: candles[i],
         type: "BUY",
-        filter: bars[i].filter,
+        filter: entry,
         adaptiveRange: bars[i].adaptiveRange,
         upper: bars[i].upper,
         lower: bars[i].lower,
+        isReEntry: false,
       });
+      currentSimTrade = {
+        type: "BUY",
+        entryPrice: entry,
+        stopLoss: entry - 5.0,
+        takeProfit1: entry + 5.0,
+        takeProfit4: entry + 20.0,
+        hitTp1: false,
+        barIndex: i,
+      };
     } else if (isSellFlip) {
+      const entry = Number(bars[i].filter.toFixed(2));
+      initialTrendFilterPrice = entry; // Titik awal garis merah muncul pertama kali!
+      lastExitReason = null;
+      reEntryCount = 0;
       rawSignals.push({
         barIndex: i,
         candle: candles[i],
         type: "SELL",
-        filter: bars[i].filter,
+        filter: entry,
         adaptiveRange: bars[i].adaptiveRange,
         upper: bars[i].upper,
         lower: bars[i].lower,
+        isReEntry: false,
       });
+      currentSimTrade = {
+        type: "SELL",
+        entryPrice: entry,
+        stopLoss: entry + 5.0,
+        takeProfit1: entry - 5.0,
+        takeProfit4: entry - 20.0,
+        hitTp1: false,
+        barIndex: i,
+      };
+    } else if (!currentSimTrade && lastExitReason === "SL") {
+      // ATURAN RE-ENTRY PRESISI:
+      // Re-Entry HANYA berlaku jika posisi sebelumnya terkena SL SAJA,
+      // dan harga kembali menyentuh titik awal garis hijau (BUY) atau garis merah (SELL) muncul pertama kali.
+      // Entry price HARUS SAMA PERSIS dengan titik awal garis muncul pertama kali (initialTrendFilterPrice),
+      // TIDAK BOLEH menggunakan garis filter yang sudah bergerak naik/turun di bar-bar setelahnya!
+      if (currTrend === 1 && initialTrendFilterPrice !== null && i > lastExitBarIdx && reEntryCount < 2) {
+        const c = candles[i];
+        if (c.high >= initialTrendFilterPrice) {
+          const entry = initialTrendFilterPrice;
+          rawSignals.push({
+            barIndex: i,
+            candle: c,
+            type: "BUY",
+            filter: initialTrendFilterPrice,
+            adaptiveRange: bars[i].adaptiveRange,
+            upper: bars[i].upper,
+            lower: bars[i].lower,
+            isReEntry: true,
+          });
+          currentSimTrade = {
+            type: "BUY",
+            entryPrice: entry,
+            stopLoss: entry - 5.0,
+            takeProfit1: entry + 5.0,
+            takeProfit4: entry + 20.0,
+            hitTp1: false,
+            barIndex: i,
+          };
+          lastExitReason = null;
+          lastExitBarIdx = i;
+          reEntryCount++;
+        }
+      } else if (currTrend === -1 && initialTrendFilterPrice !== null && i > lastExitBarIdx && reEntryCount < 2) {
+        const c = candles[i];
+        if (c.low <= initialTrendFilterPrice) {
+          const entry = initialTrendFilterPrice;
+          rawSignals.push({
+            barIndex: i,
+            candle: c,
+            type: "SELL",
+            filter: initialTrendFilterPrice,
+            adaptiveRange: bars[i].adaptiveRange,
+            upper: bars[i].upper,
+            lower: bars[i].lower,
+            isReEntry: true,
+          });
+          currentSimTrade = {
+            type: "SELL",
+            entryPrice: entry,
+            stopLoss: entry + 5.0,
+            takeProfit1: entry - 5.0,
+            takeProfit4: entry - 20.0,
+            hitTp1: false,
+            barIndex: i,
+          };
+          lastExitReason = null;
+          lastExitBarIdx = i;
+          reEntryCount++;
+        }
+      }
     }
   }
 
-  // Ensure the latest signal strictly mirrors TradingView's active current trend state
+  // Ensure the latest signal strictly mirrors TradingView's active current trend state if empty
   const currentTrendState = tssResult.currentTrend;
   if (currentTrendState === "BULLISH" || currentTrendState === "BEARISH") {
     const expectedType: "BUY" | "SELL" = currentTrendState === "BULLISH" ? "BUY" : "SELL";
-    if (rawSignals.length === 0 || rawSignals[rawSignals.length - 1].type !== expectedType) {
+    if (rawSignals.length === 0) {
       const lastBarIdx = bars.length - 1;
-      const lastBar = bars[lastBarIdx];
       const duration = tssResult.stats?.currentTrendDurationBars || 1;
       const originIdx = Math.max(0, lastBarIdx - duration + 1);
       rawSignals.push({
@@ -132,6 +264,7 @@ export function generateHistoricalSignalsFromCandles(
         adaptiveRange: bars[originIdx].adaptiveRange,
         upper: bars[originIdx].upper,
         lower: bars[originIdx].lower,
+        isReEntry: false,
       });
     }
   }
@@ -185,6 +318,7 @@ export function generateHistoricalSignalsFromCandles(
     let finalStatus: AISignal["status"] = "COMPLETED";
     let finalSignalStatus: AISignal["signalStatus"] = "CLOSED";
     let finalCloseResult: AISignal["closeResult"] = "WIN";
+    let finalClosePrice = entryPrice;
 
     // Forward simulation across bars between this signal and the next signal
     for (let b = sig.barIndex + 1; b < endBarIndex; b++) {
@@ -248,38 +382,107 @@ export function generateHistoricalSignalsFromCandles(
       }
     }
 
-    if (isLast) {
-      // The most recent signal represents the currently active Trend State on TradingView
-      finalStatus = "ACTIVE";
-      const currentPips = Math.round(
-        isBuy ? (currentLive - entryPrice) * 10 : (entryPrice - currentLive) * 10
-      );
-      finalRealizedPips = currentPips;
+    const tradeAlreadyEnded = hitSl || hitTp4 || finalSignalStatus === "SL HIT" || finalSignalStatus === "BREAK EVEN";
 
-      if (hitTp4 || currentPips >= 200) {
-        finalSignalStatus = "TP4 HIT";
-        finalCloseResult = "WIN";
-        finalRealizedPips = Math.max(200, currentPips);
-      } else if (hitTp3 || currentPips >= 150) {
-        finalSignalStatus = "TP3 HIT";
-        finalCloseResult = "WIN";
-        finalRealizedPips = Math.max(150, currentPips);
-      } else if (hitTp2 || currentPips >= 100) {
-        finalSignalStatus = "TP2 HIT";
-        finalCloseResult = "WIN";
-        finalRealizedPips = Math.max(100, currentPips);
-      } else if (hitTp1 || currentPips >= 50) {
-        finalSignalStatus = "TP1 HIT";
-        finalCloseResult = "WIN";
-        finalRealizedPips = Math.max(50, currentPips);
-      } else if (currentPips >= 30) {
-        finalSignalStatus = "BE SET (+30p)";
-        finalCloseResult = "BE";
-        finalRealizedPips = currentPips;
+    if (isLast) {
+      if (tradeAlreadyEnded) {
+        // PERBAIKAN KRITIS:
+        // Jika sinyal terakhir SUDAH kena SL (atau BE / TP4) pada candle lampau, statusnya ADALAH COMPLETED!
+        // Posisi sudah di-close oleh SL, tidak boleh dihidupkan kembali menjadi ACTIVE hanya karena harga naik belakangan.
+        finalStatus = "COMPLETED";
       } else {
-        finalSignalStatus = "ACTIVE";
-        finalCloseResult = undefined;
-        finalRealizedPips = currentPips;
+        // Sinyal belum pernah kena SL/BE/TP4 di candle sebelumnya -> Evaluasi harga LIVE saat ini:
+        const isBeActive = hitTp1;
+        const currentPips = Math.round(
+          isBuy ? (currentLive - entryPrice) * 10 : (entryPrice - currentLive) * 10
+        );
+
+        if (isBuy) {
+          if (!isBeActive && currentLive <= stopLoss) {
+            finalStatus = "COMPLETED";
+            finalSignalStatus = "SL HIT";
+            finalCloseResult = "LOSS";
+            finalRealizedPips = -50;
+            finalClosePrice = stopLoss;
+            closedAtMs = Date.now();
+          } else if (isBeActive && currentLive <= entryPrice) {
+            finalStatus = "COMPLETED";
+            finalSignalStatus = "BREAK EVEN";
+            finalCloseResult = "BE";
+            finalRealizedPips = 0;
+            finalClosePrice = entryPrice;
+            closedAtMs = Date.now();
+          } else if (currentLive >= takeProfit4 || currentPips >= 200) {
+            finalStatus = "COMPLETED";
+            finalSignalStatus = "TP4 HIT";
+            finalCloseResult = "WIN";
+            finalRealizedPips = 200;
+            finalClosePrice = takeProfit4;
+            closedAtMs = Date.now();
+          } else {
+            finalStatus = "ACTIVE";
+            finalRealizedPips = currentPips;
+            if (hitTp3 || currentPips >= 150) {
+              finalSignalStatus = "TP3 HIT";
+              finalCloseResult = "WIN";
+            } else if (hitTp2 || currentPips >= 100) {
+              finalSignalStatus = "TP2 HIT";
+              finalCloseResult = "WIN";
+            } else if (hitTp1 || currentPips >= 50) {
+              finalSignalStatus = "TP1 HIT";
+              finalCloseResult = "WIN";
+            } else if (currentPips >= 30) {
+              finalSignalStatus = "BE SET (+30p)";
+              finalCloseResult = "BE";
+            } else {
+              finalSignalStatus = "ACTIVE";
+              finalCloseResult = undefined;
+            }
+          }
+        } else {
+          // SELL checks for live price
+          if (!isBeActive && currentLive >= stopLoss) {
+            finalStatus = "COMPLETED";
+            finalSignalStatus = "SL HIT";
+            finalCloseResult = "LOSS";
+            finalRealizedPips = -50;
+            finalClosePrice = stopLoss;
+            closedAtMs = Date.now();
+          } else if (isBeActive && currentLive >= entryPrice) {
+            finalStatus = "COMPLETED";
+            finalSignalStatus = "BREAK EVEN";
+            finalCloseResult = "BE";
+            finalRealizedPips = 0;
+            finalClosePrice = entryPrice;
+            closedAtMs = Date.now();
+          } else if (currentLive <= takeProfit4 || currentPips >= 200) {
+            finalStatus = "COMPLETED";
+            finalSignalStatus = "TP4 HIT";
+            finalCloseResult = "WIN";
+            finalRealizedPips = 200;
+            finalClosePrice = takeProfit4;
+            closedAtMs = Date.now();
+          } else {
+            finalStatus = "ACTIVE";
+            finalRealizedPips = currentPips;
+            if (hitTp3 || currentPips >= 150) {
+              finalSignalStatus = "TP3 HIT";
+              finalCloseResult = "WIN";
+            } else if (hitTp2 || currentPips >= 100) {
+              finalSignalStatus = "TP2 HIT";
+              finalCloseResult = "WIN";
+            } else if (hitTp1 || currentPips >= 50) {
+              finalSignalStatus = "TP1 HIT";
+              finalCloseResult = "WIN";
+            } else if (currentPips >= 30) {
+              finalSignalStatus = "BE SET (+30p)";
+              finalCloseResult = "BE";
+            } else {
+              finalSignalStatus = "ACTIVE";
+              finalCloseResult = undefined;
+            }
+          }
+        }
       }
     } else {
       // Prior signal in history
@@ -323,7 +526,6 @@ export function generateHistoricalSignalsFromCandles(
     }
 
     // Determine final exit price for closed/history signals:
-    let finalClosePrice = entryPrice;
     if (finalSignalStatus === "TP4 HIT") {
       finalClosePrice = takeProfit4;
     } else if (finalSignalStatus === "TP3 HIT") {
@@ -385,10 +587,13 @@ export function generateHistoricalSignalsFromCandles(
       },
     ];
 
+    const isReEntry = Boolean(sig.isReEntry);
+
     const signalItem: AISignal = {
-      id: `SIG-XAU-${timeframe}-${sig.candle.time}`,
+      id: `SIG-XAU-${timeframe}-${sig.candle.time}${isReEntry ? "-RE" : ""}`,
       symbol: "XAUUSD",
       signalType: sig.type,
+      isReEntry,
       entryPrice,
       stopLoss,
       takeProfit1,
@@ -415,14 +620,22 @@ export function generateHistoricalSignalsFromCandles(
       timestamp: formatShortTime(sig.candle.time),
       timeframe,
       trendDirection: isBuy ? "BULLISH" : "BEARISH",
-      strength: 94,
-      confidenceScore: 94,
-      primaryReason: `⚡ Sinyal ${isBuy ? "BUY (Garis Hijau Muncul)" : "SELL (Garis Merah Muncul)"}: Area Entry tepat di garis filter $${entryPrice.toFixed(2)} untuk meminimalkan drawdown`,
-      technicalFactors: [
-        `Garis ${isBuy ? "Hijau (Support ALMA Step Filter)" : "Merah (Resistance ALMA Step Filter)"}: $${entryPrice.toFixed(2)}`,
-        `Area Entry Presisi: $${(isBuy ? entryPrice : entryPrice - 1.2).toFixed(2)} - $${(isBuy ? entryPrice + 1.2 : entryPrice).toFixed(2)}`,
-        `Proteksi SL: 50 pips ($${stopLoss.toFixed(2)}) | Target TP1: 50 pips ($${takeProfit1.toFixed(2)})`,
-      ],
+      strength: isReEntry ? 91 : 94,
+      confidenceScore: isReEntry ? 91 : 94,
+      primaryReason: isReEntry
+        ? `⚡ Re-Entry ${isBuy ? "BUY (Kembali ke Titik Awal Garis Hijau)" : "SELL (Kembali ke Titik Awal Garis Merah)"}: Posisi re-entry di titik awal $${entryPrice.toFixed(2)} setelah posisi sebelumnya terkena SL.`
+        : `⚡ Sinyal ${isBuy ? "BUY (Garis Hijau Muncul)" : "SELL (Garis Merah Muncul)"}: Area Entry tepat di titik awal garis filter $${entryPrice.toFixed(2)} untuk meminimalkan drawdown`,
+      technicalFactors: isReEntry
+        ? [
+            `Konfirmasi Re-Entry: Posisi sebelumnya telah terkena SL dan tren ${isBuy ? "Bullish (Garis Hijau)" : "Bearish (Garis Merah)"} masih valid`,
+            `Harga kembali ke titik awal garis ${isBuy ? "hijau" : "merah"} pertama kali muncul: $${entryPrice.toFixed(2)}`,
+            `Proteksi SL: 50 pips ($${stopLoss.toFixed(2)}) | Target TP1: 50 pips ($${takeProfit1.toFixed(2)})`,
+          ]
+        : [
+            `Garis ${isBuy ? "Hijau (Support ALMA Step Filter)" : "Merah (Resistance ALMA Step Filter)"}: $${entryPrice.toFixed(2)}`,
+            `Area Entry Presisi: $${(isBuy ? entryPrice : entryPrice - 1.2).toFixed(2)} - $${(isBuy ? entryPrice + 1.2 : entryPrice).toFixed(2)}`,
+            `Proteksi SL: 50 pips ($${stopLoss.toFixed(2)}) | Target TP1: 50 pips ($${takeProfit1.toFixed(2)})`,
+          ],
       confluences,
       pipsSl: 50,
       pipsTp1: 50,
@@ -437,11 +650,11 @@ export function generateHistoricalSignalsFromCandles(
         estimatedProfitTp2: 100.0,
         estimatedProfitTp3: 150.0,
       },
-      executionPlan: `Entry ${sig.type} tepat di garis ${isBuy ? "hijau" : "merah"} $${entryPrice.toFixed(
+      executionPlan: `Entry ${isReEntry ? "Re-Entry " : ""}${sig.type} tepat di titik awal garis ${isBuy ? "hijau" : "merah"} $${entryPrice.toFixed(
         2
       )}. SL: $${stopLoss.toFixed(
         2
-      )} (50p), TP1: $${takeProfit1.toFixed(2)} (50p). Minim drawdown dengan menunggu retest level filter.`,
+      )} (50p), TP1: $${takeProfit1.toFixed(2)} (50p). Menjaga risk-reward optimal sesuai aturan setup.`,
       source: "⚡ TradingView Trend State Strategy (Pine Script v6)",
       tssData: {
         trend: isBuy ? "BULLISH" : "BEARISH",
@@ -450,7 +663,7 @@ export function generateHistoricalSignalsFromCandles(
         upperBand: sig.upper,
         lowerBand: sig.lower,
         trendStateInt: isBuy ? 1 : -1,
-        isStepFlippedNow: true,
+        isStepFlippedNow: !isReEntry,
         bullSignal: isBuy,
         bearSignal: !isBuy,
         sourceType: "ALMA_HLC3",
@@ -468,8 +681,9 @@ export function generateHistoricalSignalsFromCandles(
   // Descending order (newest first)
   const sortedSignals = processedSignals.sort((a, b) => b.createdAt - a.createdAt);
 
+  // If no signal is currently active (e.g. stopped out at SL or reached TP4), activeSignal is null!
   const activeSignal =
-    sortedSignals.find((s) => s.status === "ACTIVE") || sortedSignals[0] || null;
+    sortedSignals.find((s) => s.status === "ACTIVE") || null;
 
   return {
     signalsList: sortedSignals,
