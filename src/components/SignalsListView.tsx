@@ -78,35 +78,41 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
       if (livePips >= 200 || (isBuy ? livePrice >= sig.takeProfit4 : livePrice <= sig.takeProfit4) || status === "TP4 HIT") {
         return {
           label: "🏆 TP4 HIT MAX (+200p)",
+          shortLabel: "🏆 TP4 (+200p)",
           className: "bg-emerald-500/30 text-emerald-200 border-emerald-400 font-black shadow-md shadow-emerald-500/20",
         };
       }
       if (livePips >= 150 || (isBuy ? livePrice >= sig.takeProfit3 : livePrice <= sig.takeProfit3) || status === "TP3 HIT") {
         return {
           label: "🎯 TP3 HIT · RUNNING",
+          shortLabel: "🎯 TP3 HIT",
           className: "bg-cyan-500/25 text-cyan-300 border-cyan-500/60 font-black",
         };
       }
       if (livePips >= 100 || (isBuy ? livePrice >= sig.takeProfit2 : livePrice <= sig.takeProfit2) || status === "TP2 HIT") {
         return {
           label: "🎯 TP2 HIT · RUNNING",
+          shortLabel: "🎯 TP2 HIT",
           className: "bg-teal-500/25 text-teal-300 border-teal-500/60 font-black",
         };
       }
       if (livePips >= 50 || (isBuy ? livePrice >= sig.takeProfit1 : livePrice <= sig.takeProfit1) || status === "TP1 HIT") {
         return {
           label: "🎯 TP1 HIT · RUNNING",
+          shortLabel: "🎯 TP1 HIT",
           className: "bg-emerald-500/25 text-emerald-300 border-emerald-500/60 font-black",
         };
       }
       if (livePips >= 30 || sig.isBreakevenSet || status === "BE SET (+30p)") {
         return {
           label: "🛡️ BE AKTIF (+30p)",
+          shortLabel: "🛡️ BE (+30p)",
           className: "bg-cyan-500/25 text-cyan-300 border-cyan-400/60 animate-pulse font-black",
         };
       }
       return {
         label: "⚡ LIVE RUNNING",
+        shortLabel: "⚡ LIVE",
         className: "bg-emerald-500/25 text-emerald-400 border-emerald-500/50 animate-pulse font-black",
       };
     }
@@ -116,37 +122,44 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
       case "TP1 HIT":
         return {
           label: "TP1 WIN (+50p)",
+          shortLabel: "TP1 (+50p)",
           className: "bg-emerald-950/80 text-emerald-400 border-emerald-600/40 font-bold",
         };
       case "TP2 HIT":
         return {
           label: "TP2 WIN (+100p)",
+          shortLabel: "TP2 (+100p)",
           className: "bg-teal-950/80 text-teal-300 border-teal-600/40 font-bold",
         };
       case "TP3 HIT":
         return {
           label: "TP3 WIN (+150p)",
+          shortLabel: "TP3 (+150p)",
           className: "bg-cyan-950/80 text-cyan-300 border-cyan-500/40 font-bold",
         };
       case "TP4 HIT":
         return {
           label: "TP4 MAX WIN (+200p)",
+          shortLabel: "TP4 (+200p)",
           className: "bg-emerald-900/90 text-emerald-300 border-emerald-400/60 font-black",
         };
       case "BREAK EVEN":
         return {
           label: "HIT BE (0p)",
+          shortLabel: "BE (0p)",
           className: "bg-blue-950/80 text-blue-300 border-blue-500/40 font-bold",
         };
       case "SL HIT":
         return {
           label: "SL HIT (-50p)",
+          shortLabel: "SL (-50p)",
           className: "bg-rose-950/80 text-rose-400 border-rose-600/50 font-bold",
         };
       case "CLOSED":
       default:
         return {
           label: "CLOSED (SINYAL BARU)",
+          shortLabel: "CLOSED",
           className: "bg-slate-800/80 text-slate-400 border-slate-700/60 font-medium",
         };
     }
@@ -202,35 +215,47 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
       className="w-full max-w-full lg:max-w-7xl xl:max-w-[1600px] mx-auto pb-28 pt-2 px-2 sm:px-4 md:px-6 text-slate-100 space-y-4 sm:space-y-5 animate-fadeIn"
     >
       {/* Top Header */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-cyan-400 shrink-0" />
-            <span className="whitespace-nowrap">Signal Real-time XAU/USD</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-base sm:text-lg md:text-xl font-black text-white tracking-tight flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
+            <Sliders className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+            <span className="whitespace-nowrap">Signal Entry</span>
           </h2>
         </div>
 
         {/* Actions & Radar Indicator */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {onRefreshScan && (
             <button
               onClick={onRefreshScan}
               disabled={isScanning}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 text-[11px] sm:text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0"
               title="Hitung Ulang Sinyal & Riwayat dari Awal Data Candle"
             >
-              <Zap className={`w-3.5 h-3.5 shrink-0 ${isScanning ? "animate-spin text-amber-400" : "text-cyan-400"}`} />
-              <span className="whitespace-nowrap">{isScanning ? "Menghitung..." : "Sinkron TradingView"}</span>
+              <Zap className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 ${isScanning ? "animate-spin text-amber-400" : "text-cyan-400"}`} />
+              <span className="whitespace-nowrap">
+                {isScanning ? (
+                  "Menghitung..."
+                ) : (
+                  <>
+                    <span className="hidden sm:inline">Sinkron TradingView</span>
+                    <span className="inline sm:hidden">Sinkron TV</span>
+                  </>
+                )}
+              </span>
             </button>
           )}
 
           {/* Real-time Radar Status Indicator */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-bold shadow-sm whitespace-nowrap shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-[11px] sm:text-xs font-bold shadow-sm whitespace-nowrap shrink-0">
             <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
             </span>
-            <span className="whitespace-nowrap">Radar Live Aktif</span>
+            <span className="whitespace-nowrap">
+              <span className="hidden sm:inline">Radar Live Aktif</span>
+              <span className="inline sm:hidden">Radar Live</span>
+            </span>
           </div>
         </div>
       </div>
@@ -265,73 +290,82 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
         filterType !== "TP_WIN" &&
         filterType !== "HIT_BE" &&
         filterType !== "SL_HIT" &&
-        (!selectedDateKey || selectedDateKey === todayKey) && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5 text-xs font-black text-emerald-400 uppercase tracking-wider">
-              <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
-              <span>Sinyal Live Saat Ini (Sedang Berjalan)</span>
-            </div>
-            <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 font-mono font-bold">
-              1 POSISI AKTIF
-            </span>
-          </div>
+        (!selectedDateKey || selectedDateKey === todayKey) && (() => {
+        const rawSession = getTradingSessionName();
+        const shortSession = rawSession.replace("London / New York", "London/NY").replace("Tokyo / London", "Tokyo/LDN");
+        const activeBadge = getStatusBadge(activeSignal);
 
-          <div
-            onClick={() => {
-              if (!isSubscriptionActive && onOpenPaywall) {
-                onOpenPaywall();
-              } else {
-                onSelectSignal(activeSignal);
-              }
-            }}
-            className="p-4 rounded-2xl bg-gradient-to-br from-[#0c152e] via-[#091024] to-[#0a1226] border-2 border-emerald-500/40 shadow-xl shadow-emerald-950/20 hover:border-emerald-400/70 transition cursor-pointer relative overflow-hidden group"
-          >
-            {/* Ambient Background Accent */}
-
-            <div className="flex items-start justify-between relative z-10">
-              <div className="flex items-center gap-2.5">
-                <span
-                  className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase ${
-                    activeSignal.signalType.includes("BUY")
-                      ? "bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20"
-                      : "bg-rose-500 text-white shadow-md shadow-rose-500/20"
-                  }`}
-                >
-                  {activeSignal.signalType.includes("BUY") ? "BUY" : "SELL"}
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 px-1">
+              <div className="flex items-center gap-1.5 text-xs font-black text-emerald-400 uppercase tracking-wider whitespace-nowrap min-w-0">
+                <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-400 shrink-0" />
+                <span className="truncate">
+                  <span className="hidden sm:inline">Sinyal Live Saat Ini (Sedang Berjalan)</span>
+                  <span className="inline sm:hidden">Sinyal Live Aktif</span>
                 </span>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-black text-white tracking-tight">
-                      {activeSignal.symbol || "XAUUSD"}
-                    </span>
-                    <span className="text-xs font-mono font-bold text-slate-300">
-                      @ {!isSubscriptionActive ? "••••••" : activeSignal.entryPrice.toFixed(2)}
-                    </span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 font-mono font-bold whitespace-nowrap shrink-0">
+                1 POSISI AKTIF
+              </span>
+            </div>
+
+            <div
+              onClick={() => {
+                if (!isSubscriptionActive && onOpenPaywall) {
+                  onOpenPaywall();
+                } else {
+                  onSelectSignal(activeSignal);
+                }
+              }}
+              className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-[#0c152e] via-[#091024] to-[#0a1226] border-2 border-emerald-500/40 shadow-xl shadow-emerald-950/20 hover:border-emerald-400/70 transition cursor-pointer relative overflow-hidden group"
+            >
+              {/* Header inside Card */}
+              <div className="flex items-center justify-between gap-2 relative z-10">
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <span
+                    className={`px-2 py-1 sm:px-2.5 sm:py-1 rounded-lg text-xs font-black uppercase shrink-0 ${
+                      activeSignal.signalType.includes("BUY")
+                        ? "bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20"
+                        : "bg-rose-500 text-white shadow-md shadow-rose-500/20"
+                    }`}
+                  >
+                    {activeSignal.signalType.includes("BUY") ? "BUY" : "SELL"}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
+                      <span className="text-sm sm:text-base font-black text-white tracking-tight">
+                        {activeSignal.symbol || "XAUUSD"}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-300">
+                        @ {!isSubscriptionActive ? "••••••" : activeSignal.entryPrice.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
+                      <span>{activeSignal.timeframe || "H1"}</span>
+                      <span>•</span>
+                      <span className="text-cyan-300 font-semibold truncate">
+                        <span className="hidden sm:inline">Sesi {rawSession}</span>
+                        <span className="inline sm:hidden">Sesi {shortSession}</span>
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                    <span>{activeSignal.timeframe || "H1"}</span>
-                    <span>•</span>
-                    <span className="text-cyan-300 font-semibold">
-                      Sesi {getTradingSessionName()}
-                    </span>
-                  </div>
+                </div>
+
+                {/* Status Badge */}
+                <div className="shrink-0 flex items-center">
+                  <span
+                    className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-black uppercase border whitespace-nowrap shrink-0 ${
+                      activeBadge.className
+                    }`}
+                  >
+                    <span className="hidden sm:inline">{activeBadge.label}</span>
+                    <span className="inline sm:hidden">{activeBadge.shortLabel || activeBadge.label}</span>
+                  </span>
                 </div>
               </div>
 
-              {/* Status Badge */}
-              <div className="flex flex-col items-end gap-1">
-                <span
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-black uppercase border whitespace-nowrap ${
-                    getStatusBadge(activeSignal).className
-                  }`}
-                >
-                  {getStatusBadge(activeSignal).label}
-                </span>
-              </div>
-            </div>
-
-            {/* Price Targets Grid */}
+              {/* Price Targets Grid */}
             {(() => {
               const isBuy = activeSignal.signalType.includes("BUY");
               const livePrice = currentPrice && currentPrice > 0 ? currentPrice : activeSignal.entryPrice;
@@ -396,7 +430,8 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* SECTION 2: SEARCH & FILTER TABS */}
       <div className="space-y-2.5 pt-2 relative">
@@ -640,10 +675,10 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
                 </div>
 
                 {/* Price, Pips & Status Badge */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                   {typeof sig.realizedPips === "number" && !isLive && (
                     <span
-                      className={`text-xs font-mono font-black ${
+                      className={`text-xs font-mono font-black shrink-0 ${
                         sig.realizedPips > 0
                           ? "text-emerald-400"
                           : sig.realizedPips < 0
@@ -651,16 +686,17 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
                           : "text-slate-400"
                       }`}
                     >
-                      {sig.realizedPips > 0 ? `+${sig.realizedPips}` : sig.realizedPips} p
+                      {sig.realizedPips > 0 ? `+${sig.realizedPips}` : sig.realizedPips}p
                     </span>
                   )}
-                  <span className="font-mono font-bold text-sm text-slate-200">
+                  <span className="font-mono font-bold text-xs sm:text-sm text-slate-200 shrink-0">
                     {isLocked ? "••••••" : price}
                   </span>
                   <span
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase border whitespace-nowrap ${badge.className}`}
+                    className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9.5px] sm:text-[10px] font-black uppercase border whitespace-nowrap shrink-0 ${badge.className}`}
                   >
-                    {badge.label}
+                    <span className="hidden sm:inline">{badge.label}</span>
+                    <span className="inline sm:hidden">{badge.shortLabel || badge.label}</span>
                   </span>
                 </div>
               </div>
