@@ -1090,8 +1090,19 @@ export default function App() {
       const activeExisting = currentSignalRef.current;
 
       try {
+        let candlesToUse = activeCandles;
+        if (!targetCandles && (!candlesToUse || candlesToUse.length < 15)) {
+          const fresh = await fetchRealCandles(activeTf);
+          if (fresh && fresh.length >= 15) {
+            candlesToUse = fresh;
+          }
+        }
+
         const { signalsList: calculatedSignals, currentSignal: calculatedActiveSignal } =
-          generateHistoricalSignalsFromCandles(activeCandles, activeTf, livePrice);
+          generateHistoricalSignalsFromCandles(candlesToUse, activeTf, livePrice, {
+            sourceType: "Custom",
+            confirmClose: false,
+          });
 
         if (calculatedSignals && calculatedSignals.length > 0) {
           setSignalsList(calculatedSignals);
@@ -1519,11 +1530,31 @@ export default function App() {
       setStreamStats(stats);
       setCurrentTick(liveTick);
 
-      // Keep current forming candle dynamically synced with live price
+      // Keep current forming candle dynamically synced with live price and roll over on 5-minute bucket
       setCandles((prev) => {
         if (!prev || prev.length === 0) return prev;
         const lastIndex = prev.length - 1;
         const last = prev[lastIndex];
+        const stepMs =
+          (timeframe === "M1" ? 1 : timeframe === "M3" ? 3 : timeframe === "M15" ? 15 : timeframe === "H1" ? 60 : 5) *
+          60 *
+          1000;
+        const bucketTime = Math.floor(liveTick.time / stepMs) * stepMs;
+
+        if (bucketTime > last.time) {
+          const newCandle: Candle = {
+            time: bucketTime,
+            open: liveTick.price,
+            high: liveTick.price,
+            low: liveTick.price,
+            close: liveTick.price,
+            volume: 100,
+          };
+          const next = [...prev, newCandle];
+          if (next.length > 300) next.shift();
+          return next;
+        }
+
         const updatedLast: Candle = {
           ...last,
           close: liveTick.price,
@@ -1538,19 +1569,25 @@ export default function App() {
       checkSignalHitsAgainstLivePrice(liveTick);
     });
 
-    // Frequent light sync with server engine (keeps phone in 100% lock-step with 24/7 background calculations)
+    // High-frequency sync with server engine (1 second interval for real-time instantaneous signal updates)
     const serverSyncInterval = setInterval(() => {
       syncWithServerState();
-    }, 2500);
+    }, 1000);
+
+    // Refresh candles from server every 15s to keep historical calibration exact
+    const candleRefreshInterval = setInterval(() => {
+      fetchRealCandles(timeframe);
+    }, 15000);
 
     const interval = setInterval(() => {
       triggerAiScan();
-    }, 60000);
+    }, 30000);
 
     return () => {
       unsubscribe();
       clearTimeout(initialLoadTimer);
       clearInterval(serverSyncInterval);
+      clearInterval(candleRefreshInterval);
       clearInterval(interval);
     };
   }, [timeframe, fetchRealCandles, triggerAiScan, checkSignalHitsAgainstLivePrice, syncWithServerState]);

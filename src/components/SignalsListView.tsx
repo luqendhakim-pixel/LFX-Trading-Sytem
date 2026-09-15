@@ -449,9 +449,14 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
       {!activeSignal &&
         filterType === "ALL" &&
         (!selectedDateKey || selectedDateKey === todayKey) && (() => {
-          const lastCompleted = signalsList.find((s) => s.status === "COMPLETED");
-          const wasSlHit = lastCompleted?.signalStatus === "SL HIT";
+          const lastCompleted = signalsList && signalsList.length > 0 ? signalsList[0] : undefined;
+          // Re-entry HANYA berlaku jika sinyal terbaru persis terkena SL murni (bukan BE, bukan TP, bukan Reversal)
+          const wasPureSlHit =
+            lastCompleted?.status === "COMPLETED" &&
+            lastCompleted?.signalStatus === "SL HIT" &&
+            !lastCompleted?.exitReason?.includes("REVERSAL");
           const isBuy = lastCompleted?.signalType.includes("BUY");
+
           return (
             <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-[#0c152e]/80 via-[#080f22]/90 to-[#070b18] border border-cyan-500/30 shadow-lg relative overflow-hidden">
               <div className="flex items-center justify-between gap-2">
@@ -467,16 +472,16 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
                       <span className="px-2 py-0.5 rounded-full bg-slate-800/90 text-slate-300 border border-slate-700 text-[10px] font-bold font-mono whitespace-nowrap">
                         FLAT (0 LOT)
                       </span>
-                      {wasSlHit && lastCompleted && (
+                      {wasPureSlHit && lastCompleted && (
                         <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold whitespace-nowrap">
                           Syarat Re-Entry: Kembali ke ${lastCompleted.entryPrice.toFixed(2)}
                         </span>
                       )}
                     </div>
                     <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
-                      {wasSlHit && lastCompleted
-                        ? `Posisi sebelumnya terkena SL. Re-Entry ${isBuy ? "BUY" : "SELL"} hanya berlaku jika harga kembali ke titik awal garis ${isBuy ? "hijau" : "merah"} pertama kali muncul ($${lastCompleted.entryPrice.toFixed(2)}), atau menunggu pembalikan tren baru.`
-                        : "Sinyal sebelumnya telah mencapai target (TP/BE Selesai). Radar menunggu kemunculan sinyal flip tren berikutnya."}
+                      {wasPureSlHit && lastCompleted
+                        ? `Posisi ${isBuy ? "BUY" : "SELL"} sebelumnya terkena SL. Re-Entry hanya berlaku jika harga kembali ke titik awal garis ${isBuy ? "hijau" : "merah"} ($${lastCompleted.entryPrice.toFixed(2)}). Namun jika muncul sinyal ${isBuy ? "SELL" : "BUY"} baru, Re-Entry batal dan prioritas mutlak mengikuti sinyal baru tersebut.`
+                        : "Posisi sebelumnya telah selesai (TP/BE/Pembalikan Sinyal). Radar memprioritaskan dan menunggu setup sinyal tren berikutnya."}
                     </p>
                   </div>
                 </div>

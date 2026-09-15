@@ -787,6 +787,8 @@ class SignalEngineServer {
   private isProcessingTick = false;
   private lastEvaluatedPrice = 0;
   private notifiedEventKeys = new Set<string>();
+  private activeCandles: any[] = [];
+  private lastCandleEvalTime = 0;
 
   constructor() {
     this.state = this.loadStateFromDisk();
@@ -1050,39 +1052,42 @@ class SignalEngineServer {
       } else {
         console.log(`[SignalEngineServer] Syncing new TradingView signal: ${signal.signalType} @ ${signal.entryPrice}`);
         this.state.currentSignal = signal;
-      }
-    }
-
-    const mergedMap = new Map<string, AISignalServer>();
-    // Pertahankan semua sinyal yang sudah ada di server
-    for (const s of this.state.signalsList) {
-      mergedMap.set(s.id, s);
-    }
-
-    if (list && Array.isArray(list) && list.length > 0) {
-      for (const s of list) {
-        if (!mergedMap.has(s.id)) {
-          mergedMap.set(s.id, s as AISignalServer);
-        } else {
-          const existing = mergedMap.get(s.id)!;
-          // Perbarui status jika sinyal baru memiliki progress yang lebih maju
-          if (s.status === "COMPLETED" || (s.realizedPips && s.realizedPips > (existing.realizedPips || 0))) {
-            mergedMap.set(s.id, { ...existing, ...(s as AISignalServer) });
-          }
+        if (signal.status === "ACTIVE") {
+          this.sendNewSignalNotif(signal);
         }
       }
     }
 
-    if (this.state.currentSignal) {
-      mergedMap.set(this.state.currentSignal.id, this.state.currentSignal);
+    const mergedMap = new Map<string, AISignalServer>();
+
+    // 1. Masukkan sinyal baru dari candle generator (authoritative)
+    if (list && Array.isArray(list) && list.length > 0) {
+      for (const s of list) {
+        mergedMap.set(s.id, s as AISignalServer);
+      }
     }
+
+    // 2. Pertahankan sinyal historis yang sudah tersimpan di server jika belum ada
+    for (const s of this.state.signalsList) {
+      if (!mergedMap.has(s.id)) {
+        mergedMap.set(s.id, s);
+      }
+    }
+
+    if (signal) {
+      mergedMap.set(signal.id, signal);
+      if (signal.status === "ACTIVE") {
+        this.state.currentSignal = signal;
+      }
+    }
+
     const sorted = Array.from(mergedMap.values()).sort((a, b) => b.createdAt - a.createdAt);
-    // HANYA sinyal berstatus ACTIVE yang masih valid yang boleh aktif
+    // HANYA satu sinyal terbaru yang boleh berstatus ACTIVE
     this.state.signalsList = sorted.map((s, index) => {
-      if (index === 0 && (!signal || signal.status === "ACTIVE")) {
+      if (index === 0) {
         return s;
       }
-      if (s.status === "ACTIVE" && index > 0) {
+      if (s.status === "ACTIVE") {
         return {
           ...s,
           status: "COMPLETED" as const,
@@ -1093,7 +1098,7 @@ class SignalEngineServer {
       return s;
     });
 
-    // Cari sinyal yang benar-benar masih ACTIVE
+    // Tetapkan sinyal aktif
     const activeSig = this.state.signalsList.find((s) => s.status === "ACTIVE");
     this.state.currentSignal = activeSig || null;
 
@@ -1105,8 +1110,9 @@ class SignalEngineServer {
   public syncFromCandles(candles: any[], spotPrice?: number) {
     if (!candles || candles.length < 15) return;
     try {
+      this.activeCandles = [...candles];
       const livePrice = spotPrice || this.lastEvaluatedPrice || (candles[candles.length - 1]?.close ?? 4400.0);
-      const result = generateHistoricalSignalsFromCandles(candles, "M5", livePrice, { sourceType: "Custom" });
+      const result = generateHistoricalSignalsFromCandles(candles, "M5", livePrice, { sourceType: "Custom", confirmClose: false });
       if (result && result.signalsList && result.signalsList.length > 0) {
         const topSignal = (result.currentSignal || null) as unknown as AISignalServer | null;
         this.syncFromTradingViewEngine(topSignal, result.signalsList as unknown as AISignalServer[]);
@@ -1157,6 +1163,65 @@ class SignalEngineServer {
 
     try {
       this.lastEvaluatedPrice = livePrice;
+
+      // 1. DYNAMIC REAL-TIME CANDLE MAINTENANCE & INSTANT SIGNAL EVALUATION (ZERO DELAY)
+      if (this.activeCandles && this.activeCandles.length > 0) {
+        const lastCandle = this.activeCandles[this.activeCandles.length - 1];
+        const bucket5m = Math.floor(Date.now() / (5 * 60 * 1000)) * (5 * 60 * 1000);
+
+        if (bucket5m > lastCandle.time) {
+          // New 5-minute candle opened! Roll over immediately
+          this.activeCandles.push({
+            time: bucket5m,
+            open: livePrice,
+            high: livePrice,
+            low: livePrice,
+            close: livePrice,
+            volume: 100,
+          });
+          if (this.activeCandles.length > 300) {
+            this.activeCandles.shift();
+          }
+        } else {
+          // Update forming candle with latest tick
+          lastCandle.close = livePrice;
+          lastCandle.high = Math.max(lastCandle.high, livePrice);
+          lastCandle.low = Math.min(lastCandle.low, livePrice);
+        }
+
+        // Check if forming candle generates a new trend flip or re-entry in real-time (throttled to 1s)
+        const now = Date.now();
+        if (now - this.lastCandleEvalTime >= 1000) {
+          this.lastCandleEvalTime = now;
+          const result = generateHistoricalSignalsFromCandles(
+            this.activeCandles,
+            "M5",
+            livePrice,
+            { sourceType: "Custom", confirmClose: false }
+          );
+
+          if (result && result.signalsList && result.signalsList.length > 0) {
+            const topSignal = (result.currentSignal || null) as unknown as AISignalServer | null;
+            const currentActive = this.state.currentSignal;
+
+            if (topSignal && topSignal.status === "ACTIVE") {
+              const isDifferentSignal =
+                !currentActive ||
+                currentActive.id !== topSignal.id ||
+                currentActive.signalType !== topSignal.signalType ||
+                (currentActive.status === "COMPLETED" && Math.abs(currentActive.entryPrice - topSignal.entryPrice) > 0.5);
+
+              if (isDifferentSignal) {
+                console.log(
+                  `[SignalEngineServer] ⚡ REAL-TIME INSTANT SIGNAL TRIGGERED: ${topSignal.signalType} @ ${topSignal.entryPrice} (Zone: ${topSignal.entryZoneLow} - ${topSignal.entryZoneHigh})`
+                );
+                this.syncFromTradingViewEngine(topSignal, result.signalsList as unknown as AISignalServer[]);
+              }
+            }
+          }
+        }
+      }
+
       const current = this.state.currentSignal;
 
       if (!current || current.status !== "ACTIVE" || current.signalStatus === "SL HIT" || current.signalStatus === "BREAK EVEN") {
@@ -1316,6 +1381,24 @@ class SignalEngineServer {
     } finally {
       this.isProcessingTick = false;
     }
+  }
+
+  private sendNewSignalNotif(sig: AISignalServer) {
+    const key = `new_sig_${sig.id}`;
+    if (this.notifiedEventKeys.has(key)) return;
+    this.notifiedEventKeys.add(key);
+
+    const isRe = (sig as any).isReEntry;
+    const notif = {
+      id: `notif-${Date.now()}`,
+      type: "NEW_SIGNAL" as const,
+      title: `${isRe ? "🔁 RE-ENTRY" : "🚀 SINYAL BARU"}: ${sig.signalType} XAU/USD`,
+      body: `Entry: $${sig.entryPrice.toFixed(2)} (Zona: $${sig.entryZoneLow.toFixed(2)} - $${sig.entryZoneHigh.toFixed(2)}) | SL: $${sig.stopLoss.toFixed(2)} | TP1: $${sig.takeProfit1.toFixed(2)}`,
+      timestamp: Date.now(),
+    };
+    this.state.recentNotifications = [notif, ...this.state.recentNotifications.slice(0, 19)];
+    this.saveStateToDisk();
+    broadcastPushNotification(notif.title, notif.body, "/", `new-sig-${sig.id}`);
   }
 
   private sendBeHitNotif(sig: AISignalServer, price: number) {

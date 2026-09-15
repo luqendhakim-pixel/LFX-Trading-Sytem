@@ -114,21 +114,34 @@ export function generateHistoricalSignalsFromCandles(
         (currentSimTrade.type === "BUY" && currTrend === -1) ||
         (currentSimTrade.type === "SELL" && currTrend === 1);
       if (isReversal) {
+        // Pembalikan arah trend: Re-entry lama BATAL total! Prioritas mengikuti sinyal baru
         currentSimTrade = null;
         lastExitReason = "REVERSAL";
         lastExitBarIdx = i;
       } else if (currentSimTrade.type === "BUY") {
         if (candles[i].high >= currentSimTrade.takeProfit1) currentSimTrade.hitTp1 = true;
-        // Posisi HANYA di-close jika menyentuh Stop Loss (50 pips)
-        if (candles[i].low <= currentSimTrade.stopLoss) {
+        
+        if (currentSimTrade.hitTp1 && candles[i].low <= currentSimTrade.entryPrice) {
+          // Break Even tertrigger: Posisi aman/impas. Re-entry TIDAK BERLAKU setelah BE atau TP!
+          currentSimTrade = null;
+          lastExitReason = "BE";
+          lastExitBarIdx = i;
+        } else if (!currentSimTrade.hitTp1 && candles[i].low <= currentSimTrade.stopLoss) {
+          // Posisi terkena SL murni: Syarat Re-Entry HANYA berlaku jika posisi terkena SL saja
           currentSimTrade = null;
           lastExitReason = "SL";
           lastExitBarIdx = i;
         }
       } else if (currentSimTrade.type === "SELL") {
         if (candles[i].low <= currentSimTrade.takeProfit1) currentSimTrade.hitTp1 = true;
-        // Posisi HANYA di-close jika menyentuh Stop Loss (50 pips)
-        if (candles[i].high >= currentSimTrade.stopLoss) {
+
+        if (currentSimTrade.hitTp1 && candles[i].high >= currentSimTrade.entryPrice) {
+          // Break Even tertrigger: Posisi aman/impas. Re-entry TIDAK BERLAKU setelah BE atau TP!
+          currentSimTrade = null;
+          lastExitReason = "BE";
+          lastExitBarIdx = i;
+        } else if (!currentSimTrade.hitTp1 && candles[i].high >= currentSimTrade.stopLoss) {
+          // Posisi terkena SL murni: Syarat Re-Entry HANYA berlaku jika posisi terkena SL saja
           currentSimTrade = null;
           lastExitReason = "SL";
           lastExitBarIdx = i;
@@ -138,6 +151,7 @@ export function generateHistoricalSignalsFromCandles(
 
     if (isBuyFlip) {
       const entry = Number(bars[i].filter.toFixed(2));
+      // Prioritas selalu mengikuti sinyal BUY terbaru, membatalkan semua re-entry SELL sebelumnya
       initialTrendFilterPrice = entry; // Titik awal garis hijau muncul pertama kali!
       lastExitReason = null;
       reEntryCount = 0;
@@ -162,6 +176,7 @@ export function generateHistoricalSignalsFromCandles(
       };
     } else if (isSellFlip) {
       const entry = Number(bars[i].filter.toFixed(2));
+      // Prioritas selalu mengikuti sinyal SELL terbaru, membatalkan semua re-entry BUY sebelumnya
       initialTrendFilterPrice = entry; // Titik awal garis merah muncul pertama kali!
       lastExitReason = null;
       reEntryCount = 0;
@@ -186,10 +201,9 @@ export function generateHistoricalSignalsFromCandles(
       };
     } else if (!currentSimTrade && lastExitReason === "SL") {
       // ATURAN RE-ENTRY PRESISI:
-      // Re-Entry HANYA berlaku jika posisi sebelumnya terkena SL SAJA,
-      // dan harga kembali menyentuh titik awal garis hijau (BUY) atau garis merah (SELL) muncul pertama kali.
-      // Entry price HARUS SAMA PERSIS dengan titik awal garis muncul pertama kali (initialTrendFilterPrice),
-      // TIDAK BOLEH menggunakan garis filter yang sudah bergerak naik/turun di bar-bar setelahnya!
+      // 1. Re-Entry HANYA berlaku jika posisi sebelumnya terkena SL SAJA (tidak berlaku jika BE / TP).
+      // 2. Re-Entry TIDAK BERLAKU jika sudah muncul sinyal arah berlawanan terbaru (prioritas selalu ke sinyal baru).
+      // 3. Re-Entry hanya terjadi jika tren saat ini MASIH searah dan harga kembali menyentuh titik awal garis awal muncul.
       if (currTrend === 1 && initialTrendFilterPrice !== null && i > lastExitBarIdx && reEntryCount < 2) {
         const c = candles[i];
         if (c.high >= initialTrendFilterPrice) {
@@ -382,16 +396,14 @@ export function generateHistoricalSignalsFromCandles(
       }
     }
 
-    const tradeAlreadyEnded = hitSl || hitTp4 || finalSignalStatus === "SL HIT" || finalSignalStatus === "BREAK EVEN";
+    const tradeAlreadyEnded = hitSl || finalSignalStatus === "SL HIT";
 
     if (isLast) {
       if (tradeAlreadyEnded) {
-        // PERBAIKAN KRITIS:
-        // Jika sinyal terakhir SUDAH kena SL (atau BE / TP4) pada candle lampau, statusnya ADALAH COMPLETED!
-        // Posisi sudah di-close oleh SL, tidak boleh dihidupkan kembali menjadi ACTIVE hanya karena harga naik belakangan.
+        // Jika sinyal terakhir SUDAH kena SL pada candle lampau, statusnya ADALAH COMPLETED!
         finalStatus = "COMPLETED";
       } else {
-        // Sinyal belum pernah kena SL/BE/TP4 di candle sebelumnya -> Evaluasi harga LIVE saat ini:
+        // Sinyal belum pernah kena SL -> Evaluasi harga LIVE saat ini:
         const isBeActive = hitTp1;
         const currentPips = Math.round(
           isBuy ? (currentLive - entryPrice) * 10 : (entryPrice - currentLive) * 10
@@ -413,12 +425,11 @@ export function generateHistoricalSignalsFromCandles(
             finalClosePrice = entryPrice;
             closedAtMs = Date.now();
           } else if (currentLive >= takeProfit4 || currentPips >= 200) {
-            finalStatus = "COMPLETED";
+            // Posisi profit maksimal TP4 tetap aktif di dashboard hingga trend selesai / berbalik
+            finalStatus = "ACTIVE";
             finalSignalStatus = "TP4 HIT";
             finalCloseResult = "WIN";
-            finalRealizedPips = 200;
-            finalClosePrice = takeProfit4;
-            closedAtMs = Date.now();
+            finalRealizedPips = Math.max(200, currentPips);
           } else {
             finalStatus = "ACTIVE";
             finalRealizedPips = currentPips;
@@ -456,12 +467,11 @@ export function generateHistoricalSignalsFromCandles(
             finalClosePrice = entryPrice;
             closedAtMs = Date.now();
           } else if (currentLive <= takeProfit4 || currentPips >= 200) {
-            finalStatus = "COMPLETED";
+            // Posisi profit maksimal TP4 tetap aktif di dashboard hingga trend selesai / berbalik
+            finalStatus = "ACTIVE";
             finalSignalStatus = "TP4 HIT";
             finalCloseResult = "WIN";
-            finalRealizedPips = 200;
-            finalClosePrice = takeProfit4;
-            closedAtMs = Date.now();
+            finalRealizedPips = Math.max(200, currentPips);
           } else {
             finalStatus = "ACTIVE";
             finalRealizedPips = currentPips;

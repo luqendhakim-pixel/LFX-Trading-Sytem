@@ -815,17 +815,39 @@ async function bootstrapTradingViewSignals() {
           close: Number((parseFloat(k[4]) + basisOffset).toFixed(2)),
           volume: Math.round(parseFloat(k[5]) * 100) || 500,
         }));
+
+        // Dynamically align latest forming candle with live spot price
+        if (candles.length > 0) {
+          const lastCandle = candles[candles.length - 1];
+          const current5mBucket = Math.floor(Date.now() / (5 * 60 * 1000)) * (5 * 60 * 1000);
+
+          if (current5mBucket > lastCandle.time) {
+            candles.push({
+              time: current5mBucket,
+              open: spotPrice,
+              high: spotPrice,
+              low: spotPrice,
+              close: spotPrice,
+              volume: 100,
+            });
+            if (candles.length > 300) candles.shift();
+          } else {
+            lastCandle.close = spotPrice;
+            lastCandle.high = Math.max(lastCandle.high, spotPrice);
+            lastCandle.low = Math.min(lastCandle.low, spotPrice);
+          }
+        }
+
         signalEngineServer.syncFromCandles(candles, spotPrice);
-        console.log(`[SignalEngineServer] Initialized from 250 real candles. Signals synced.`);
       }
     }
   } catch (e) {
     console.warn("[SignalEngineServer] Startup candle bootstrap failed:", e);
   }
 }
-// Run immediately on boot, then repeat
+// Run immediately on boot, then repeat every 10 seconds for real-time responsiveness
 bootstrapTradingViewSignals();
-setInterval(bootstrapTradingViewSignals, 30000);
+setInterval(bootstrapTradingViewSignals, 10000);
 
 // ==========================================
 // 📅 REAL-TIME ECONOMIC NEWS CALENDAR API (XAU/USD RED FOLDER NEWS)
@@ -1323,9 +1345,23 @@ app.get("/api/market/gold/candles", async (req, res) => {
         // Synchronize latest forming candle close with exact spot price
         if (spotCalibratedCandles.length > 0) {
           const lastIdx = spotCalibratedCandles.length - 1;
-          spotCalibratedCandles[lastIdx].close = spotPrice;
-          spotCalibratedCandles[lastIdx].high = Math.max(spotCalibratedCandles[lastIdx].high, spotPrice);
-          spotCalibratedCandles[lastIdx].low = Math.min(spotCalibratedCandles[lastIdx].low, spotPrice);
+          const bucketTime = Math.floor(Date.now() / (stepMinutes * 60 * 1000)) * (stepMinutes * 60 * 1000);
+
+          if (bucketTime > spotCalibratedCandles[lastIdx].time) {
+            spotCalibratedCandles.push({
+              time: bucketTime,
+              open: spotPrice,
+              high: spotPrice,
+              low: spotPrice,
+              close: spotPrice,
+              volume: 100,
+            });
+            if (spotCalibratedCandles.length > count) spotCalibratedCandles.shift();
+          } else {
+            spotCalibratedCandles[lastIdx].close = spotPrice;
+            spotCalibratedCandles[lastIdx].high = Math.max(spotCalibratedCandles[lastIdx].high, spotPrice);
+            spotCalibratedCandles[lastIdx].low = Math.min(spotCalibratedCandles[lastIdx].low, spotPrice);
+          }
 
           cachedGoldState.price = spotPrice;
           cachedGoldState.bid = Number((spotPrice - 0.08).toFixed(2));
