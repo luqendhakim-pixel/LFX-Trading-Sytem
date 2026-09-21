@@ -29,6 +29,7 @@ import { LfxLogo } from "./LfxLogo";
 import { SignalWinRateHistoryModal } from "./SignalWinRateHistoryModal";
 import { EconomicNewsCalendar } from "./EconomicNewsCalendar";
 import { DailyWinRateCalendarPicker } from "./DailyWinRateCalendarPicker";
+import { DynamicPerformanceSparkline } from "./DynamicPerformanceSparkline";
 import {
   calculateDynamicHistoryWinRate,
   calculateWinRateForDate,
@@ -416,27 +417,19 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
               </div>
             </div>
 
-            {/* Radiant Neon Green Sparkline Chart across bottom */}
-            <div className="mt-3 -mx-4 -mb-4 pt-2">
-              <svg viewBox="0 0 300 50" className="w-full h-12 stroke-emerald-400 fill-emerald-500/10">
-                <defs>
-                  <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-                <path
-                  d="M0,45 Q30,42 60,38 T120,30 T180,32 T240,20 T300,10 L300,50 L0,50 Z"
-                  fill="url(#sparklineGrad)"
-                />
-                <path
-                  d="M0,45 Q30,42 60,38 T120,30 T180,32 T240,20 T300,10"
-                  fill="none"
-                  stroke="#10b981"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-              </svg>
+            {/* Dynamic Real-Time Cumulative Pips Curve (Responsive to Calendar Date & Period Filter) */}
+            <div className="mt-2.5 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 pt-1 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <DynamicPerformanceSparkline
+                signals={activeMetrics.signals}
+                selectedDateKey={activeWinRatePeriod === "CUSTOM_DATE" ? selectedCustomDate : null}
+                periodLabel={
+                  activeWinRatePeriod === "CUSTOM_DATE" && selectedCustomDate
+                    ? formatDateKeyToIndo(selectedCustomDate)
+                    : activeMetrics.label
+                }
+                height={52}
+                interactive={true}
+              />
             </div>
           </div>
 
@@ -553,14 +546,24 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
 
             {/* Signal Cards */}
             <div className="space-y-2">
-              {signalsList.slice(0, 5).map((sig) => {
-                const isBuy = sig.signalType.includes("BUY");
-                const price = sig.entryPrice.toFixed(3);
-                const status = sig.signalStatus || (sig.status === "ACTIVE" ? "ACTIVE" : "CLOSED");
+              {(() => {
+                const seen = new Set<string>();
+                const uniqueTop5 = signalsList
+                  .filter((s) => {
+                    if (!s || !s.id || seen.has(s.id)) return false;
+                    seen.add(s.id);
+                    return true;
+                  })
+                  .slice(0, 5);
 
-                return (
-                  <div
-                    key={sig.id}
+                return uniqueTop5.map((sig, idx) => {
+                  const isBuy = sig.signalType.includes("BUY");
+                  const price = sig.entryPrice.toFixed(3);
+                  const status = sig.signalStatus || (sig.status === "ACTIVE" ? "ACTIVE" : "CLOSED");
+
+                  return (
+                    <div
+                      key={`${sig.id}-${idx}`}
                     onClick={() => onSelectSignal(sig)}
                     className="relative flex items-center justify-between p-3.5 bg-[#0b1021] hover:bg-[#0f172e] border border-slate-800/90 rounded-2xl transition cursor-pointer active:scale-98 shadow-sm group"
                   >

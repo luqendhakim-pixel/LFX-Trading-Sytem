@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Mail,
   Lock,
   KeyRound,
   ShieldCheck,
+  ShieldAlert,
   ArrowRight,
   Sparkles,
   CheckCircle2,
@@ -47,6 +48,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [successMessage, setSuccessMessage] = useState("");
   const [previewOtp, setPreviewOtp] = useState<string | null>(null);
 
+  // 7-Day Trial Lockout State
+  const [lockedTrialNotice, setLockedTrialNotice] = useState<{
+    identifier: string;
+    name?: string;
+    expiredAt?: number;
+  } | null>(() => authService.getTrialLockedNotice());
+  const [licenseCode, setLicenseCode] = useState("");
+  const [isActivatingLicense, setIsActivatingLicense] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLockedTrialNotice(authService.getTrialLockedNotice());
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   // 1. Handle Registration (New User)
@@ -74,8 +90,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const res = await authService.loginWithPassword(
         identifier,
         password.trim(),
-        fullName.trim()
+        fullName.trim(),
+        true
       );
+
+      if (res.trialExpired) {
+        setLockedTrialNotice({
+          identifier,
+          name: fullName.trim(),
+          expiredAt: res.expiredAt,
+        });
+        return;
+      }
+
       if (res.success && res.user) {
         setSuccessMessage("Pendaftaran Berhasil! Selamat datang di LFX Trading System.");
         setTimeout(() => {
@@ -111,8 +138,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const res = await authService.loginWithPassword(
         email.trim(),
         password.trim(),
-        fullName.trim()
+        fullName.trim(),
+        false
       );
+
+      if (res.trialExpired) {
+        setLockedTrialNotice({
+          identifier: email.trim(),
+          name: fullName.trim(),
+          expiredAt: res.expiredAt,
+        });
+        return;
+      }
+
       if (res.success && res.user) {
         setSuccessMessage(res.message);
         setTimeout(() => {
@@ -128,7 +166,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // 2. Handle Request OTP (WhatsApp / Email)
+  // 3. Handle Request OTP (WhatsApp / Email)
   const handleRequestOTP = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const identifier = loginMode === "OTP_WHATSAPP" ? waNumber.trim() : email.trim();
@@ -149,6 +187,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     try {
       const res = await authService.requestOTP(identifier, authMethod, fullName.trim());
+      if (res.trialExpired) {
+        setLockedTrialNotice({
+          identifier,
+          name: fullName.trim(),
+          expiredAt: res.expiredAt,
+        });
+        return;
+      }
+
       if (res.success) {
         setStep("OTP");
         setSuccessMessage(res.message);
@@ -165,7 +212,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // 3. Handle Verify OTP
+  // 4. Handle Verify OTP
   const handleVerifyOTP = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!otpCode.trim()) {
@@ -186,6 +233,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         authMethod,
         fullName.trim()
       );
+
+      if (res.trialExpired) {
+        setLockedTrialNotice({
+          identifier,
+          name: fullName.trim(),
+          expiredAt: res.expiredAt,
+        });
+        return;
+      }
+
       if (res.success && res.user) {
         onSuccess(res.user);
       } else {
@@ -197,6 +254,157 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setIsLoading(false);
     }
   };
+
+  // 5. Handle License Activation when Trial Expired
+  const handleActivateLicenseFromLockout = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!licenseCode.trim()) {
+      setErrorMessage("Silakan masukkan Kode Lisensi VIP Anda");
+      return;
+    }
+    setIsActivatingLicense(true);
+    setErrorMessage("");
+    try {
+      const res = await authService.activateLicense(licenseCode.trim());
+      if (res.success) {
+        setSuccessMessage(res.message);
+        authService.clearTrialLockedNotice();
+        setLockedTrialNotice(null);
+        setTimeout(() => {
+          const u = authService.getUser();
+          if (u) onSuccess(u);
+        }, 800);
+      } else {
+        setErrorMessage(res.message);
+      }
+    } catch {
+      setErrorMessage("Gagal mengaktifkan lisensi. Periksa kembali kodenya.");
+    } finally {
+      setIsActivatingLicense(false);
+    }
+  };
+
+  // RENDER TRIAL EXPIRED LOCKOUT VIEW
+  if (lockedTrialNotice) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fadeIn">
+        <div className="relative w-full max-w-md bg-[#090f1d] border border-rose-500/40 rounded-3xl p-6 sm:p-7 shadow-2xl text-slate-100 overflow-hidden">
+          {/* Top Red Alert Glow */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-600 via-red-500 to-amber-500" />
+
+          {/* Header Shield & Lock */}
+          <div className="flex flex-col items-center text-center space-y-3 mb-5 mt-1">
+            <div className="relative w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-lg shadow-rose-950/50">
+              <ShieldAlert className="w-9 h-9 animate-pulse" />
+              <div className="absolute -bottom-1 -right-1 p-1 bg-red-600 rounded-lg text-white shadow">
+                <Lock className="w-3.5 h-3.5" />
+              </div>
+            </div>
+
+            <div>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/30 mb-2">
+                Akses Terkunci • Trial 7 Hari Habis
+              </span>
+              <h2 className="text-xl font-black text-white tracking-tight">
+                Masa Coba 7 Hari Selesai
+              </h2>
+              <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                Akun Anda telah otomatis keluar (log out) dan tidak dapat mengakses kembali aplikasi ini menggunakan status Free Trial.
+              </p>
+            </div>
+          </div>
+
+          {/* Account Detail Box */}
+          <div className="p-3.5 rounded-2xl bg-[#060a15] border border-slate-800 space-y-2 mb-5 text-left">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Akun Terdaftar:</span>
+              <span className="font-mono font-bold text-amber-300">{lockedTrialNotice.identifier}</span>
+            </div>
+            {lockedTrialNotice.name && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Nama Pengguna:</span>
+                <span className="font-semibold text-slate-200">{lockedTrialNotice.name}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Status Akses:</span>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800/60">
+                LOCKED (KADALUARSA)
+              </span>
+            </div>
+          </div>
+
+          {/* Activation Form */}
+          <div className="space-y-4 text-left">
+            <div>
+              <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                <span>Punya Kode Lisensi VIP?</span>
+                <span className="text-[10px] text-cyan-400 font-normal">Akses Sinyal 30 Hari</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={licenseCode}
+                  onChange={(e) => setLicenseCode(e.target.value.toUpperCase())}
+                  placeholder="Contoh: LFX150VIP"
+                  className="flex-1 bg-[#070c1a] border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 uppercase transition"
+                />
+                <button
+                  type="button"
+                  onClick={handleActivateLicenseFromLockout}
+                  disabled={isActivatingLicense || !licenseCode.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs transition disabled:opacity-40 cursor-pointer shrink-0"
+                >
+                  {isActivatingLicense ? "Memproses..." : "Aktifkan"}
+                </button>
+              </div>
+            </div>
+
+            {errorMessage && (
+              <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{successMessage}</span>
+              </div>
+            )}
+
+            {/* Direct WhatsApp VIP Upgrade Button */}
+            <a
+              href={`https://wa.me/628123456789?text=Halo%20Admin%20LFX,%20masa%20free%20trial%207%20hari%20akun%20saya%20(${encodeURIComponent(lockedTrialNotice.identifier)})%20telah%20berakhir.%20Saya%20ingin%20mengaktifkan%20langganan%20VIP%20Pro%20Sinyal.`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-98 transition cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4 fill-slate-950" />
+              <span>Hubungi Admin WhatsApp (+62 812-3456-789)</span>
+            </a>
+
+            {/* Switch Account */}
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  authService.clearTrialLockedNotice();
+                  setLockedTrialNotice(null);
+                  setAuthTab("LOGIN");
+                  setErrorMessage("");
+                }}
+                className="text-xs text-slate-400 hover:text-slate-200 underline cursor-pointer"
+              >
+                Masuk dengan Akun Lain / Akun Admin
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fadeIn">

@@ -498,3 +498,18 @@ export function getAvailableSignalDates(signalsList: AISignal[]): {
   });
 }
 
+/**
+ * Deduplicates an array of AISignals by ID, strictly keeping one unique instance per id
+ */
+export function deduplicateSignals(signals: AISignal[]): AISignal[] {
+  if (!Array.isArray(signals) || signals.length === 0) return [];
+  const map = new Map<string, AISignal>();
+  for (const s of signals) {
+    if (s && s.id && !map.has(s.id)) {
+      map.set(s.id, s);
+    }
+  }
+  return Array.from(map.values());
+}
+
+

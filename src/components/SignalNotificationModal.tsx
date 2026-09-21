@@ -99,6 +99,8 @@ export const SignalNotificationModal: React.FC<SignalNotificationModalProps> = (
       body: "Sinyal XAU/USD Real-time Aktif! Notifikasi berhasil terhubung dengan perangkat Anda.",
     });
     notificationService.playSignalSound();
+    // Also trigger server-side test to verify background service worker delivery
+    fetch("/api/push/test", { method: "POST" }).catch(() => {});
   };
 
   return (
@@ -141,6 +143,14 @@ export const SignalNotificationModal: React.FC<SignalNotificationModalProps> = (
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* PUSH STATUS BANNER & REALTIME TIP */}
+        <div className="px-4 sm:px-5 py-2 bg-[#050813] border-b border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-amber-400 font-bold">💡 Tips Presisi:</span>
+            <span>Agar notifikasi masuk saat HP terkunci/aplikasi ditutup, buka lewat <b>Google Chrome</b> lalu pilih <b>"Tambahkan ke Layar Utama" (Install PWA)</b>.</span>
+          </div>
         </div>
 
         {/* TOP STATUS BAR: PUSH STATUS & QUICK ACTIONS */}

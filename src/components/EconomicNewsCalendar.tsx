@@ -39,33 +39,38 @@ export const EconomicNewsCalendar: React.FC<EconomicNewsCalendarProps> = ({
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>("Baru saja");
-  const [feedSource, setFeedSource] = useState<string>("ForexFactory Live Feed");
+  const [feedSource, setFeedSource] = useState<string>("TradingView Live Feed");
+  const [refreshSuccessBadge, setRefreshSuccessBadge] = useState<boolean>(false);
 
   // Load real-time economic calendar
-  const loadCalendarData = useCallback(async (showLoading = false) => {
+  const loadCalendarData = useCallback(async (showLoading = false, forceRefresh = false) => {
     if (showLoading) setIsRefreshing(true);
     try {
-      const res = await fetchLiveEconomicCalendar();
+      const res = await fetchLiveEconomicCalendar(forceRefresh);
       if (res.events && res.events.length > 0) {
         setEvents(res.events);
-        setFeedSource(res.source || "ForexFactory Live Feed");
+        setFeedSource(res.source || "TradingView Live Feed");
         const d = new Date();
         setLastSyncTime(
           `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")} WIB`
         );
+        if (showLoading) {
+          setRefreshSuccessBadge(true);
+          setTimeout(() => setRefreshSuccessBadge(false), 2500);
+        }
       }
     } catch (e) {
       // Fallback already handled
     } finally {
       if (showLoading) {
-        setTimeout(() => setIsRefreshing(false), 400);
+        setTimeout(() => setIsRefreshing(false), 350);
       }
     }
   }, []);
 
   // Initial load
   useEffect(() => {
-    loadCalendarData(false);
+    loadCalendarData(false, false);
   }, [loadCalendarData]);
 
   // Real-time polling: Refresh calendar every 45s, update clock every 1s for live countdown
@@ -236,13 +241,19 @@ export const EconomicNewsCalendar: React.FC<EconomicNewsCalendarProps> = ({
         <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
           {/* Refresh Button */}
           <button
-            onClick={() => loadCalendarData(true)}
+            onClick={() => loadCalendarData(true, true)}
             disabled={isRefreshing}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 shrink-0"
-            title="Perbarui Data Berita Terkini"
+            className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 shrink-0 ${
+              refreshSuccessBadge
+                ? "bg-emerald-950/80 border-emerald-500/60 text-emerald-300 shadow-lg shadow-emerald-950/50"
+                : "bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-200"
+            }`}
+            title="Perbarui Data Berita Terkini Secara Real-Time"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing ? "animate-spin" : ""}`} />
-            <span className="hidden md:inline">Refresh</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshSuccessBadge ? "text-emerald-400" : "text-cyan-400"} ${isRefreshing ? "animate-spin" : ""}`} />
+            <span className="hidden md:inline">
+              {isRefreshing ? "Updating..." : refreshSuccessBadge ? "Tersinkron!" : "Refresh"}
+            </span>
           </button>
 
           {/* Filter Pills Grid: 3 Tombol Sejajar Presisi */}

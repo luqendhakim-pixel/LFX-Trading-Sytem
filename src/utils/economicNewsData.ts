@@ -50,10 +50,12 @@ export function getEconomicCalendarEvents(currentTimeMs: number = Date.now()): E
     return `${dayNamesId[targetDate.getDay()]}, ${targetDate.getDate()} ${monthNamesId[targetDate.getMonth()]}`;
   };
 
-  // Find Monday of the current week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
-  const currentDayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday...
-  // Calculate distance from current day to Monday
-  const distanceToMonday = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+  // Find Monday of the current/upcoming trading week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  const currentDayOfWeek = now.getDay();
+  // If Sunday (0) or Saturday (6), anchor forward to the upcoming Monday
+  let distanceToMonday = 1 - currentDayOfWeek;
+  if (currentDayOfWeek === 0) distanceToMonday = 1; // Tomorrow
+  else if (currentDayOfWeek === 6) distanceToMonday = 2; // In 2 days
   const mondayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + distanceToMonday);
 
   // Standard institutional weekly macro schedule anchored to Monday (day 0) through Friday (day 4)
@@ -251,11 +253,14 @@ export function getEconomicCalendarEvents(currentTimeMs: number = Date.now()): E
 }
 
 // Fetch live economic calendar from backend endpoint with client-side fallback
-export async function fetchLiveEconomicCalendar(): Promise<EconomicCalendarResponse> {
+export async function fetchLiveEconomicCalendar(forceRefresh: boolean = false): Promise<EconomicCalendarResponse> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch("/api/market/economic-calendar", { signal: controller.signal });
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const url = forceRefresh
+      ? `/api/market/economic-calendar?refresh=true&_t=${Date.now()}`
+      : `/api/market/economic-calendar?_t=${Date.now()}`;
+    const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
 
     if (res.ok) {
@@ -296,7 +301,21 @@ export function evaluateMarketNewsSafety(events: EconomicEvent[], currentTimeMs:
       diffMinutes: Math.round((e.scheduledTimestamp - currentTimeMs) / (60 * 1000)),
     }))
     .filter((item) => item.diffMinutes >= -20) // consider events from 20 mins ago to future
-    .sort((a, b) => Math.abs(a.diffMinutes) - Math.abs(b.diffMinutes));
+    .sort((a, b) => {
+      // If one is in the active no-trade window (-15 to 15), prioritize it
+      const aInWindow = a.diffMinutes >= -15 && a.diffMinutes <= 15;
+      const bInWindow = b.diffMinutes >= -15 && b.diffMinutes <= 15;
+      if (aInWindow && !bInWindow) return -1;
+      if (!aInWindow && bInWindow) return 1;
+
+      // Prioritize future upcoming events over already released ones
+      const aFuture = a.diffMinutes >= 0;
+      const bFuture = b.diffMinutes >= 0;
+      if (aFuture && !bFuture) return -1;
+      if (!aFuture && bFuture) return 1;
+
+      return a.diffMinutes - b.diffMinutes;
+    });
 
   if (!highImpactUpcoming.length) {
     return {

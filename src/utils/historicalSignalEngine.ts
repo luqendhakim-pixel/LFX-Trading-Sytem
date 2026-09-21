@@ -51,8 +51,16 @@ export function generateHistoricalSignalsFromCandles(
   livePrice?: number,
   config?: Partial<TrendStateConfig>
 ): HistoricalEngineResult {
-  const n = candles ? candles.length : 0;
-  const currentLive = livePrice || (n > 0 ? candles[n - 1].close : 4405.5);
+  // Deduplicate input candles by time and ensure strict ascending order
+  const candleMap = new Map<number, Candle>();
+  for (const c of candles || []) {
+    if (c && typeof c.time === "number" && !isNaN(c.time)) {
+      candleMap.set(c.time, c);
+    }
+  }
+  const cleanCandles = Array.from(candleMap.values()).sort((a, b) => a.time - b.time);
+  const n = cleanCandles.length;
+  const currentLive = livePrice || (n > 0 ? cleanCandles[n - 1].close : 4405.5);
 
   if (n < 5) {
     return {
@@ -61,9 +69,9 @@ export function generateHistoricalSignalsFromCandles(
     };
   }
 
-  // 1. Run the official Pine Script v6 Trend State Strategy on all candles
+  // 1. Run the official Pine Script v6 Trend State Strategy on clean candles
   // confirmClose: false allows real-time signal trigger right on the bar as the green/red line appears!
-  const tssResult = calculateTrendStateStrategy(candles, {
+  const tssResult = calculateTrendStateStrategy(cleanCandles, {
     ...defaultTSSConfig,
     sourceType: "Custom",
     confirmClose: false,
@@ -119,28 +127,28 @@ export function generateHistoricalSignalsFromCandles(
         lastExitReason = "REVERSAL";
         lastExitBarIdx = i;
       } else if (currentSimTrade.type === "BUY") {
-        if (candles[i].high >= currentSimTrade.takeProfit1) currentSimTrade.hitTp1 = true;
+        if (cleanCandles[i].high >= currentSimTrade.takeProfit1) currentSimTrade.hitTp1 = true;
         
-        if (currentSimTrade.hitTp1 && candles[i].low <= currentSimTrade.entryPrice) {
+        if (currentSimTrade.hitTp1 && cleanCandles[i].low <= currentSimTrade.entryPrice) {
           // Break Even tertrigger: Posisi aman/impas. Re-entry TIDAK BERLAKU setelah BE atau TP!
           currentSimTrade = null;
           lastExitReason = "BE";
           lastExitBarIdx = i;
-        } else if (!currentSimTrade.hitTp1 && candles[i].low <= currentSimTrade.stopLoss) {
+        } else if (!currentSimTrade.hitTp1 && cleanCandles[i].low <= currentSimTrade.stopLoss) {
           // Posisi terkena SL murni: Syarat Re-Entry HANYA berlaku jika posisi terkena SL saja
           currentSimTrade = null;
           lastExitReason = "SL";
           lastExitBarIdx = i;
         }
       } else if (currentSimTrade.type === "SELL") {
-        if (candles[i].low <= currentSimTrade.takeProfit1) currentSimTrade.hitTp1 = true;
+        if (cleanCandles[i].low <= currentSimTrade.takeProfit1) currentSimTrade.hitTp1 = true;
 
-        if (currentSimTrade.hitTp1 && candles[i].high >= currentSimTrade.entryPrice) {
+        if (currentSimTrade.hitTp1 && cleanCandles[i].high >= currentSimTrade.entryPrice) {
           // Break Even tertrigger: Posisi aman/impas. Re-entry TIDAK BERLAKU setelah BE atau TP!
           currentSimTrade = null;
           lastExitReason = "BE";
           lastExitBarIdx = i;
-        } else if (!currentSimTrade.hitTp1 && candles[i].high >= currentSimTrade.stopLoss) {
+        } else if (!currentSimTrade.hitTp1 && cleanCandles[i].high >= currentSimTrade.stopLoss) {
           // Posisi terkena SL murni: Syarat Re-Entry HANYA berlaku jika posisi terkena SL saja
           currentSimTrade = null;
           lastExitReason = "SL";
@@ -157,7 +165,7 @@ export function generateHistoricalSignalsFromCandles(
       reEntryCount = 0;
       rawSignals.push({
         barIndex: i,
-        candle: candles[i],
+        candle: cleanCandles[i],
         type: "BUY",
         filter: entry,
         adaptiveRange: bars[i].adaptiveRange,
@@ -182,7 +190,7 @@ export function generateHistoricalSignalsFromCandles(
       reEntryCount = 0;
       rawSignals.push({
         barIndex: i,
-        candle: candles[i],
+        candle: cleanCandles[i],
         type: "SELL",
         filter: entry,
         adaptiveRange: bars[i].adaptiveRange,
@@ -205,7 +213,7 @@ export function generateHistoricalSignalsFromCandles(
       // 2. Re-Entry TIDAK BERLAKU jika sudah muncul sinyal arah berlawanan terbaru (prioritas selalu ke sinyal baru).
       // 3. Re-Entry hanya terjadi jika tren saat ini MASIH searah dan harga kembali menyentuh titik awal garis awal muncul.
       if (currTrend === 1 && initialTrendFilterPrice !== null && i > lastExitBarIdx && reEntryCount < 2) {
-        const c = candles[i];
+        const c = cleanCandles[i];
         if (c.high >= initialTrendFilterPrice) {
           const entry = initialTrendFilterPrice;
           rawSignals.push({
@@ -232,7 +240,7 @@ export function generateHistoricalSignalsFromCandles(
           reEntryCount++;
         }
       } else if (currTrend === -1 && initialTrendFilterPrice !== null && i > lastExitBarIdx && reEntryCount < 2) {
-        const c = candles[i];
+        const c = cleanCandles[i];
         if (c.low <= initialTrendFilterPrice) {
           const entry = initialTrendFilterPrice;
           rawSignals.push({
@@ -272,7 +280,7 @@ export function generateHistoricalSignalsFromCandles(
       const originIdx = Math.max(0, lastBarIdx - duration + 1);
       rawSignals.push({
         barIndex: originIdx,
-        candle: candles[originIdx],
+        candle: cleanCandles[originIdx],
         type: expectedType,
         filter: bars[originIdx].filter,
         adaptiveRange: bars[originIdx].adaptiveRange,
@@ -336,7 +344,7 @@ export function generateHistoricalSignalsFromCandles(
 
     // Forward simulation across bars between this signal and the next signal
     for (let b = sig.barIndex + 1; b < endBarIndex; b++) {
-      const bar = candles[b];
+      const bar = cleanCandles[b];
 
       if (isBuy) {
         if (bar.high >= takeProfit4) hitTp4 = true;
@@ -633,16 +641,16 @@ export function generateHistoricalSignalsFromCandles(
       strength: isReEntry ? 91 : 94,
       confidenceScore: isReEntry ? 91 : 94,
       primaryReason: isReEntry
-        ? `⚡ Re-Entry ${isBuy ? "BUY (Kembali ke Titik Awal Garis Hijau)" : "SELL (Kembali ke Titik Awal Garis Merah)"}: Posisi re-entry di titik awal $${entryPrice.toFixed(2)} setelah posisi sebelumnya terkena SL.`
-        : `⚡ Sinyal ${isBuy ? "BUY (Garis Hijau Muncul)" : "SELL (Garis Merah Muncul)"}: Area Entry tepat di titik awal garis filter $${entryPrice.toFixed(2)} untuk meminimalkan drawdown`,
+        ? `⚡ Re-Entry ${isBuy ? "BUY" : "SELL"}: Posisi re-entry di level $${entryPrice.toFixed(2)} setelah posisi sebelumnya terkena SL.`
+        : `⚡ Sinyal ${isBuy ? "BUY" : "SELL"}: Area Entry presisi di $${entryPrice.toFixed(2)} untuk meminimalkan drawdown`,
       technicalFactors: isReEntry
         ? [
-            `Konfirmasi Re-Entry: Posisi sebelumnya telah terkena SL dan tren ${isBuy ? "Bullish (Garis Hijau)" : "Bearish (Garis Merah)"} masih valid`,
-            `Harga kembali ke titik awal garis ${isBuy ? "hijau" : "merah"} pertama kali muncul: $${entryPrice.toFixed(2)}`,
+            `Konfirmasi Re-Entry: Posisi sebelumnya telah terkena SL dan tren ${isBuy ? "Bullish" : "Bearish"} masih valid`,
+            `Harga kembali ke titik konfirmasi awal: $${entryPrice.toFixed(2)}`,
             `Proteksi SL: 50 pips ($${stopLoss.toFixed(2)}) | Target TP1: 50 pips ($${takeProfit1.toFixed(2)})`,
           ]
         : [
-            `Garis ${isBuy ? "Hijau (Support ALMA Step Filter)" : "Merah (Resistance ALMA Step Filter)"}: $${entryPrice.toFixed(2)}`,
+            `Level Filter ${isBuy ? "Support ALMA" : "Resistance ALMA"}: $${entryPrice.toFixed(2)}`,
             `Area Entry Presisi: $${(isBuy ? entryPrice : entryPrice - 1.2).toFixed(2)} - $${(isBuy ? entryPrice + 1.2 : entryPrice).toFixed(2)}`,
             `Proteksi SL: 50 pips ($${stopLoss.toFixed(2)}) | Target TP1: 50 pips ($${takeProfit1.toFixed(2)})`,
           ],
@@ -660,7 +668,7 @@ export function generateHistoricalSignalsFromCandles(
         estimatedProfitTp2: 100.0,
         estimatedProfitTp3: 150.0,
       },
-      executionPlan: `Entry ${isReEntry ? "Re-Entry " : ""}${sig.type} tepat di titik awal garis ${isBuy ? "hijau" : "merah"} $${entryPrice.toFixed(
+      executionPlan: `Entry ${isReEntry ? "Re-Entry " : ""}${sig.type} di level $${entryPrice.toFixed(
         2
       )}. SL: $${stopLoss.toFixed(
         2
@@ -688,8 +696,20 @@ export function generateHistoricalSignalsFromCandles(
     processedSignals.push(signalItem);
   }
 
+  // Deduplicate signals strictly by ID so no duplicate keys can exist
+  const signalMap = new Map<string, AISignal>();
+  for (const s of processedSignals) {
+    if (!signalMap.has(s.id)) {
+      signalMap.set(s.id, s);
+    } else {
+      // If two signals had the same ID, assign a unique deterministic suffix
+      const uniqueSuffixId = `${s.id}-${s.createdAt}-${signalMap.size}`;
+      signalMap.set(uniqueSuffixId, { ...s, id: uniqueSuffixId });
+    }
+  }
+
   // Descending order (newest first)
-  const sortedSignals = processedSignals.sort((a, b) => b.createdAt - a.createdAt);
+  const sortedSignals = Array.from(signalMap.values()).sort((a, b) => b.createdAt - a.createdAt);
 
   // If no signal is currently active (e.g. stopped out at SL or reached TP4), activeSignal is null!
   const activeSignal =

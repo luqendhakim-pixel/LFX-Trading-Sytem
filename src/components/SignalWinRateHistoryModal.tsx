@@ -19,8 +19,10 @@ import {
   Scale,
   CalendarDays,
   ChevronDown,
+  Activity,
 } from "lucide-react";
 import { AISignal } from "../types";
+import { DynamicPerformanceSparkline } from "./DynamicPerformanceSparkline";
 import {
   calculateDynamicHistoryWinRate,
   calculateWinRateForDate,
@@ -233,6 +235,30 @@ export const SignalWinRateHistoryModal: React.FC<SignalWinRateHistoryModalProps>
                 />
               </label>
             </div>
+          </div>
+
+          {/* 1.8 Interactive Performance Pips Progression Chart */}
+          <div className="p-3.5 rounded-2xl bg-[#091122] border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 font-bold text-slate-200">
+                <Activity className="w-4 h-4 text-cyan-400" />
+                <span>Grafik Akumulasi Pips Selesai</span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono border border-cyan-500/30">
+                  {currentMetrics.label}
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono">
+                {currentMetrics.signals.length} Sinyal Selesai
+              </span>
+            </div>
+
+            <DynamicPerformanceSparkline
+              signals={currentMetrics.signals}
+              selectedDateKey={selectedPeriod === "CUSTOM_DATE" ? selectedCustomDate : null}
+              periodLabel={currentMetrics.label}
+              height={64}
+              interactive={true}
+            />
           </div>
 
           {/* 2. Key 4 Pips & Win Rate Metric Cards */}

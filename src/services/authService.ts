@@ -74,12 +74,30 @@ class AuthService {
       if (stored) {
         const parsed = JSON.parse(stored) as UserProfile;
         const calc = calculateUserStatus(parsed);
-        this.currentUser = {
-          ...parsed,
-          status: calc.status,
-          isSubscriptionActive: calc.isSubscriptionActive,
-          daysRemaining: calc.daysRemaining,
-        };
+
+        // Strict 7-day trial lockout rule:
+        // When trial expires without active VIP subscription and user is not admin,
+        // automatically log out and prevent accessing the app!
+        if (calc.status === "TRIAL_EXPIRED" || calc.status === "EXPIRED") {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          localStorage.setItem(
+            "lfx_trial_locked_notice",
+            JSON.stringify({
+              identifier: parsed.identifier,
+              name: parsed.name,
+              expiredAt: parsed.trialEndsAt,
+              timestamp: Date.now(),
+            })
+          );
+          this.currentUser = null;
+        } else {
+          this.currentUser = {
+            ...parsed,
+            status: calc.status,
+            isSubscriptionActive: calc.isSubscriptionActive,
+            daysRemaining: calc.daysRemaining,
+          };
+        }
       } else {
         // No user logged in by default - new visitors must login or register
         this.currentUser = null;
@@ -131,6 +149,25 @@ class AuthService {
   public getUser(): UserProfile | null {
     if (!this.currentUser) return null;
     const calc = calculateUserStatus(this.currentUser);
+
+    // Auto logout if 7-day trial has expired and no active subscription
+    if (calc.status === "TRIAL_EXPIRED" || calc.status === "EXPIRED") {
+      const expiredUser = this.currentUser;
+      this.currentUser = null;
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.setItem(
+        "lfx_trial_locked_notice",
+        JSON.stringify({
+          identifier: expiredUser.identifier,
+          name: expiredUser.name,
+          expiredAt: expiredUser.trialEndsAt,
+          timestamp: Date.now(),
+        })
+      );
+      this.notifyListeners();
+      return null;
+    }
+
     this.currentUser = {
       ...this.currentUser,
       status: calc.status,
@@ -143,16 +180,40 @@ class AuthService {
   public async loginWithPassword(
     email: string,
     password: string,
-    name?: string
-  ): Promise<{ success: boolean; message: string; user?: UserProfile }> {
+    name?: string,
+    isRegister?: boolean
+  ): Promise<{ success: boolean; message: string; user?: UserProfile; trialExpired?: boolean; expiredAt?: number }> {
     try {
       const res = await fetch("/api/auth/login-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password, name, isRegister }),
       });
       const data = await res.json();
+
+      if (data.trialExpired) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.setItem(
+          "lfx_trial_locked_notice",
+          JSON.stringify({
+            identifier: email,
+            name: data.user?.name || name,
+            expiredAt: data.expiredAt,
+            timestamp: Date.now(),
+          })
+        );
+        this.currentUser = null;
+        this.notifyListeners();
+        return {
+          success: false,
+          trialExpired: true,
+          expiredAt: data.expiredAt,
+          message: data.message || "Masa Free Trial 7 Hari Anda telah berakhir. Akun Anda telah terkunci.",
+        };
+      }
+
       if (data.success && data.user) {
+        localStorage.removeItem("lfx_trial_locked_notice");
         this.currentUser = data.user;
         this.saveToStorage(data.user);
         return { success: true, message: data.message, user: data.user };
@@ -167,6 +228,34 @@ class AuthService {
       if (isAdmin && password !== "admin123") {
         return { success: false, message: "Password Admin tidak sesuai!" };
       }
+
+      // Check existing members registry for expired trial
+      try {
+        const raw = localStorage.getItem(MEMBERS_REGISTRY_KEY);
+        const list: UserProfile[] = raw ? JSON.parse(raw) : [];
+        const existing = list.find((m) => m.identifier.toLowerCase() === cleanEmail);
+        if (existing && !isAdmin) {
+          const calc = calculateUserStatus(existing);
+          if (calc.status === "TRIAL_EXPIRED" || calc.status === "EXPIRED") {
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+            localStorage.setItem(
+              "lfx_trial_locked_notice",
+              JSON.stringify({
+                identifier: cleanEmail,
+                name: existing.name,
+                expiredAt: existing.trialEndsAt,
+                timestamp: Date.now(),
+              })
+            );
+            return {
+              success: false,
+              trialExpired: true,
+              expiredAt: existing.trialEndsAt,
+              message: `Masa Free Trial 7 Hari untuk akun (${cleanEmail}) telah berakhir. Akun Anda telah dikunci dan tidak dapat mengakses aplikasi kembali. Silakan hubungi Admin untuk aktivasi paket VIP.`,
+            };
+          }
+        }
+      } catch (e) {}
 
       const now = Date.now();
       const user: UserProfile = {
@@ -192,7 +281,7 @@ class AuthService {
     }
   }
 
-  public async requestOTP(identifier: string, authMethod: AuthMethod, name?: string): Promise<{ success: boolean; message: string; previewOtp?: string }> {
+  public async requestOTP(identifier: string, authMethod: AuthMethod, name?: string): Promise<{ success: boolean; message: string; previewOtp?: string; trialExpired?: boolean; expiredAt?: number }> {
     try {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
@@ -200,9 +289,45 @@ class AuthService {
         body: JSON.stringify({ identifier, authMethod, name }),
       });
       const data = await res.json();
+      if (data.trialExpired) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.setItem(
+          "lfx_trial_locked_notice",
+          JSON.stringify({
+            identifier,
+            name,
+            expiredAt: data.expiredAt,
+            timestamp: Date.now(),
+          })
+        );
+        return {
+          success: false,
+          trialExpired: true,
+          expiredAt: data.expiredAt,
+          message: data.message,
+        };
+      }
       return data;
     } catch {
       // Offline / fallback generator
+      const cleanId = identifier.trim().toLowerCase();
+      try {
+        const raw = localStorage.getItem(MEMBERS_REGISTRY_KEY);
+        const list: UserProfile[] = raw ? JSON.parse(raw) : [];
+        const existing = list.find((m) => m.identifier.toLowerCase() === cleanId);
+        if (existing && existing.role !== "ADMIN") {
+          const calc = calculateUserStatus(existing);
+          if (calc.status === "TRIAL_EXPIRED" || calc.status === "EXPIRED") {
+            return {
+              success: false,
+              trialExpired: true,
+              expiredAt: existing.trialEndsAt,
+              message: `Masa Free Trial 7 Hari untuk akun (${cleanId}) telah berakhir. Akun Anda telah dikunci.`,
+            };
+          }
+        }
+      } catch (e) {}
+
       const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
       localStorage.setItem(`otp_${identifier}`, JSON.stringify({ code: mockOtp, expiresAt: Date.now() + 5 * 60 * 1000 }));
       return {
@@ -213,7 +338,7 @@ class AuthService {
     }
   }
 
-  public async verifyOTP(identifier: string, otpCode: string, authMethod: AuthMethod, name?: string): Promise<{ success: boolean; message: string; user?: UserProfile }> {
+  public async verifyOTP(identifier: string, otpCode: string, authMethod: AuthMethod, name?: string): Promise<{ success: boolean; message: string; user?: UserProfile; trialExpired?: boolean; expiredAt?: number }> {
     try {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
@@ -221,7 +346,30 @@ class AuthService {
         body: JSON.stringify({ identifier, otpCode, authMethod, name }),
       });
       const data = await res.json();
+
+      if (data.trialExpired) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.setItem(
+          "lfx_trial_locked_notice",
+          JSON.stringify({
+            identifier,
+            name: data.user?.name || name,
+            expiredAt: data.expiredAt,
+            timestamp: Date.now(),
+          })
+        );
+        this.currentUser = null;
+        this.notifyListeners();
+        return {
+          success: false,
+          trialExpired: true,
+          expiredAt: data.expiredAt,
+          message: data.message || "Masa Free Trial 7 Hari Anda telah berakhir. Akun Anda telah dikunci.",
+        };
+      }
+
       if (data.success && data.user) {
+        localStorage.removeItem("lfx_trial_locked_notice");
         this.currentUser = data.user;
         this.saveToStorage(data.user);
         return { success: true, message: data.message, user: data.user };
@@ -242,8 +390,38 @@ class AuthService {
         return { success: false, message: "Kode OTP salah atau telah kadaluarsa" };
       }
 
+      const cleanId = identifier.trim().toLowerCase();
+      const isAdmin = cleanId === ADMIN_EMAIL || cleanId.includes("admin") || cleanId === ADMIN_PHONE;
+
+      // Check registry for trial status
+      try {
+        const raw = localStorage.getItem(MEMBERS_REGISTRY_KEY);
+        const list: UserProfile[] = raw ? JSON.parse(raw) : [];
+        const existing = list.find((m) => m.identifier.toLowerCase() === cleanId);
+        if (existing && !isAdmin) {
+          const calc = calculateUserStatus(existing);
+          if (calc.status === "TRIAL_EXPIRED" || calc.status === "EXPIRED") {
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+            localStorage.setItem(
+              "lfx_trial_locked_notice",
+              JSON.stringify({
+                identifier: cleanId,
+                name: existing.name,
+                expiredAt: existing.trialEndsAt,
+                timestamp: Date.now(),
+              })
+            );
+            return {
+              success: false,
+              trialExpired: true,
+              expiredAt: existing.trialEndsAt,
+              message: `Masa Free Trial 7 Hari untuk akun (${cleanId}) telah berakhir. Akun Anda telah dikunci.`,
+            };
+          }
+        }
+      } catch (e) {}
+
       const now = Date.now();
-      const isAdmin = identifier === ADMIN_EMAIL || identifier.includes("admin") || identifier === ADMIN_PHONE;
       const newUser: UserProfile = {
         id: `USR-${Date.now().toString().slice(-6)}`,
         name: name || (identifier.includes("@") ? identifier.split("@")[0] : `Member ${identifier.slice(-4)}`),
@@ -473,8 +651,78 @@ class AuthService {
       daysRemaining: 0,
       status: "TRIAL_EXPIRED",
     };
-    this.currentUser = expiredUser;
-    this.saveToStorage(expiredUser);
+
+    // 1. Update persistent members registry
+    try {
+      const raw = localStorage.getItem(MEMBERS_REGISTRY_KEY);
+      const list: UserProfile[] = raw ? JSON.parse(raw) : [];
+      const idx = list.findIndex((m) => m.identifier.toLowerCase() === expiredUser.identifier.toLowerCase());
+      if (idx >= 0) list[idx] = expiredUser;
+      else list.push(expiredUser);
+      localStorage.setItem(MEMBERS_REGISTRY_KEY, JSON.stringify(list));
+    } catch (e) {}
+
+    // 2. Set locked trial notice for UI
+    localStorage.setItem(
+      "lfx_trial_locked_notice",
+      JSON.stringify({
+        identifier: expiredUser.identifier,
+        name: expiredUser.name,
+        expiredAt: expiredUser.trialEndsAt,
+        timestamp: now,
+      })
+    );
+
+    // 3. Immediately log out and lock the app
+    this.currentUser = null;
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    this.notifyListeners();
+  }
+
+  public getTrialLockedNotice(): { identifier: string; name?: string; expiredAt?: number; timestamp?: number } | null {
+    try {
+      const raw = localStorage.getItem("lfx_trial_locked_notice");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  public clearTrialLockedNotice(): void {
+    localStorage.removeItem("lfx_trial_locked_notice");
+  }
+
+  public async checkSessionWithServer(): Promise<{ valid: boolean; trialExpired?: boolean; message?: string }> {
+    if (!this.currentUser) return { valid: false };
+    if (this.currentUser.role === "ADMIN") return { valid: true };
+
+    try {
+      const res = await fetch("/api/auth/check-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: this.currentUser.identifier }),
+      });
+      const data = await res.json();
+      if (data.trialExpired || !data.valid) {
+        const expiredUser = this.currentUser;
+        this.currentUser = null;
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.setItem(
+          "lfx_trial_locked_notice",
+          JSON.stringify({
+            identifier: expiredUser.identifier,
+            name: expiredUser.name,
+            expiredAt: data.expiredAt || expiredUser.trialEndsAt,
+            timestamp: Date.now(),
+          })
+        );
+        this.notifyListeners();
+        return { valid: false, trialExpired: true, message: data.message };
+      }
+      return { valid: true };
+    } catch {
+      return { valid: true };
+    }
   }
 
   public simulateTrialReset(days: number = 7): void {

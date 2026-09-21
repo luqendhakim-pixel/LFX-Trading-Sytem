@@ -56,6 +56,7 @@ import { AdminPanelModal } from "./components/AdminPanelModal";
 import { authService } from "./services/authService";
 import { UserProfile } from "./types";
 import { getTradingSessionName } from "./utils/sessionHelper";
+import { deduplicateSignals } from "./utils/winratePipsCalculator";
 
 // Generate initial realistic OHLC gold candles
 export function generateInitialGoldCandles(count: number = 80, basePrice: number = 4405.5): Candle[] {
@@ -447,9 +448,11 @@ const loadStoredSignals = (): AISignal[] => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Filter out dummy artifacts
-          const valid = parsed.filter(
-            (s: AISignal) => s.id !== "SIG-XAU-TV-1788794615693" && s.entryPrice !== 4500
+          // Filter out dummy artifacts & deduplicate by ID
+          const valid = deduplicateSignals(
+            parsed.filter(
+              (s: AISignal) => s.id !== "SIG-XAU-TV-1788794615693" && s.entryPrice !== 4500
+            )
           );
           // Sort descending by createdAt (newest first)
           valid.sort((a: AISignal, b: AISignal) => b.createdAt - a.createdAt);
@@ -476,7 +479,8 @@ const loadStoredSignals = (): AISignal[] => {
             }
             return s;
           });
-          return clean.length > 0 ? clean : valid;
+          const dedupedClean = deduplicateSignals(clean);
+          return dedupedClean.length > 0 ? dedupedClean : valid;
         }
       }
     } catch (e) {
@@ -677,6 +681,50 @@ export default function App() {
     });
     return unsubscribeAuth;
   }, []);
+
+  // Strict 7-Day Trial Expiration Watchdog:
+  // Continuously monitors the user session. Once the 7-day trial elapses,
+  // the user is immediately logged out and blocked from accessing the app.
+  useEffect(() => {
+    const checkTrialLockout = () => {
+      const user = authService.getUser();
+      if (!user) {
+        if (currentUser) {
+          setCurrentUser(null);
+          setIsAuthModalOpen(true);
+        }
+        return;
+      }
+
+      if (user.role !== "ADMIN") {
+        const now = Date.now();
+        const hasActiveSub = user.subscriptionEndsAt && user.subscriptionEndsAt > now;
+        if (!hasActiveSub && user.trialEndsAt <= now) {
+          // 7-day trial has completed! Lock user out and force auto-logout
+          localStorage.setItem(
+            "lfx_trial_locked_notice",
+            JSON.stringify({
+              identifier: user.identifier,
+              name: user.name,
+              expiredAt: user.trialEndsAt,
+              timestamp: now,
+            })
+          );
+          authService.logout();
+          setCurrentUser(null);
+          setIsAuthModalOpen(true);
+        }
+      }
+    };
+
+    checkTrialLockout();
+    const interval = setInterval(checkTrialLockout, 4000);
+    window.addEventListener("focus", checkTrialLockout);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", checkTrialLockout);
+    };
+  }, [currentUser]);
 
   // 2. Modals State
   const [isLotSimModalOpen, setIsLotSimModalOpen] = useState(false);
@@ -969,11 +1017,20 @@ export default function App() {
 
   // 6. Push Notification Permission Request
   const handleRequestPushNotification = async () => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "denied") {
+        alert(
+          "Izin notifikasi diblokir di browser HP Anda. Silakan buka Pengaturan Browser (ikon Gembok di samping link URL Chrome/Safari) -> Izin Situs -> Notifikasi -> Izinkan (Allow) agar sinyal masuk saat HP terkunci."
+        );
+        return;
+      }
+    }
     const granted = await notificationService.requestPermission();
     setPushNotificationEnabled(granted);
     if (granted) {
-      notificationService.sendMobilePush("🔔 Notifikasi HP Aktif!", {
-        body: "Anda akan menerima notifikasi sinyal XAU/USD real-time dengan SL 50 pips dan TP 1/2/3/4 otomatis.",
+      await notificationService.registerWebPushSubscription();
+      notificationService.sendMobilePush("🔔 Notifikasi HP Aktif 24/7!", {
+        body: "Anda akan menerima notifikasi sinyal XAU/USD real-time saat sinyal baru muncul, TP, SL, maupun BE walau aplikasi ditutup.",
       });
       notificationService.playSignalSound();
     }
@@ -990,31 +1047,35 @@ export default function App() {
           const { currentSignal: serverActive, signalsList: serverList } = json.data;
 
           if (Array.isArray(serverList) && serverList.length > 0) {
-            // Urutkan sinyal server berdasarkan waktu terbaru lebih dulu
-            const sortedServerList = [...serverList]
-              .filter((s) => s.id !== "SIG-XAU-TV-1788794615693" && s.entryPrice !== 4500)
-              .sort((a, b) => b.createdAt - a.createdAt);
+            // Urutkan sinyal server berdasarkan waktu terbaru lebih dulu & hilangkan duplikasi ID
+            const sortedServerList = deduplicateSignals(
+              [...serverList]
+                .filter((s) => s.id !== "SIG-XAU-TV-1788794615693" && s.entryPrice !== 4500)
+                .sort((a, b) => b.createdAt - a.createdAt)
+            );
 
-            const cleanList: AISignal[] = sortedServerList.map((s, idx) => {
-              if (idx === 0) {
+            const cleanList: AISignal[] = deduplicateSignals(
+              sortedServerList.map((s, idx) => {
+                if (idx === 0) {
+                  return s as AISignal;
+                }
+                if (s.status === "ACTIVE") {
+                  return {
+                    ...(s as AISignal),
+                    status: "COMPLETED",
+                    signalStatus:
+                      s.signalStatus === "ACTIVE"
+                        ? s.realizedPips && s.realizedPips > 0
+                          ? "TP1 HIT"
+                          : "BREAK EVEN"
+                        : s.signalStatus,
+                    closeResult:
+                      s.closeResult || (s.realizedPips && s.realizedPips > 0 ? "WIN" : "BE"),
+                  };
+                }
                 return s as AISignal;
-              }
-              if (s.status === "ACTIVE") {
-                return {
-                  ...(s as AISignal),
-                  status: "COMPLETED",
-                  signalStatus:
-                    s.signalStatus === "ACTIVE"
-                      ? s.realizedPips && s.realizedPips > 0
-                        ? "TP1 HIT"
-                        : "BREAK EVEN"
-                      : s.signalStatus,
-                  closeResult:
-                    s.closeResult || (s.realizedPips && s.realizedPips > 0 ? "WIN" : "BE"),
-                };
-              }
-              return s as AISignal;
-            });
+              })
+            );
 
             setSignalsList((prev) => {
               if (prev.length !== cleanList.length) return cleanList;
@@ -1105,7 +1166,7 @@ export default function App() {
           });
 
         if (calculatedSignals && calculatedSignals.length > 0) {
-          setSignalsList(calculatedSignals);
+          setSignalsList(deduplicateSignals(calculatedSignals));
         }
 
         if (calculatedActiveSignal) {
@@ -1183,7 +1244,7 @@ export default function App() {
           const { signalsList: calculatedSignals, currentSignal: calculatedActiveSignal } =
             generateHistoricalSignalsFromCandles(candleSet, newTf, livePrice);
           if (calculatedSignals && calculatedSignals.length > 0) {
-            setSignalsList(calculatedSignals);
+            setSignalsList(deduplicateSignals(calculatedSignals));
           }
           setCurrentSignal(calculatedActiveSignal || null);
         }

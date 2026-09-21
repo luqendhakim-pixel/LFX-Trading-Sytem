@@ -22,5 +22,29 @@
     "trialEndsAt": 1789035833245,
     "subscriptionEndsAt": 1820399033245,
     "status": "ADMIN"
+  },
+  {
+    "id": "USR-102",
+    "name": "Ahmad Trader",
+    "identifier": "081298765432",
+    "password": "123456",
+    "authMethod": "WHATSAPP",
+    "role": "MEMBER",
+    "registeredAt": 1787487833983,
+    "trialEndsAt": 1788092633983,
+    "subscriptionEndsAt": null,
+    "status": "TRIAL_EXPIRED"
+  },
+  {
+    "id": "USR-103",
+    "name": "Budi Santoso",
+    "identifier": "budi.gold@gmail.com",
+    "password": "123456",
+    "authMethod": "EMAIL",
+    "role": "MEMBER",
+    "registeredAt": 1787919833983,
+    "trialEndsAt": 1788524633983,
+    "subscriptionEndsAt": null,
+    "status": "TRIAL_EXPIRED"
   }
 ]

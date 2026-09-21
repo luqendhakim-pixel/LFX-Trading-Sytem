@@ -170,7 +170,12 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
   const activeSignal = signalsList.find((s) => s.status === "ACTIVE");
 
   const seenLive = new Set<string>();
+  const seenIds = new Set<string>();
   const filteredSignals = signalsList.filter((sig) => {
+    if (!sig || !sig.id) return false;
+    // Strictly prevent any duplicate keys in list view
+    if (seenIds.has(sig.id)) return false;
+
     // Filter dinamis berdasarkan tanggal kalender jika dipilih
     if (selectedDateKey) {
       const sigDateKey = getSignalDateKey(sig);
@@ -207,6 +212,7 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
       if (!matchSym && !matchAction && !matchStatus) return false;
     }
 
+    seenIds.add(sig.id);
     return true;
   });
 
@@ -480,7 +486,7 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
                     </div>
                     <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
                       {wasPureSlHit && lastCompleted
-                        ? `Posisi ${isBuy ? "BUY" : "SELL"} sebelumnya terkena SL. Re-Entry hanya berlaku jika harga kembali ke titik awal garis ${isBuy ? "hijau" : "merah"} ($${lastCompleted.entryPrice.toFixed(2)}). Namun jika muncul sinyal ${isBuy ? "SELL" : "BUY"} baru, Re-Entry batal dan prioritas mutlak mengikuti sinyal baru tersebut.`
+                        ? `Posisi ${isBuy ? "BUY" : "SELL"} sebelumnya terkena SL. Re-Entry hanya berlaku jika harga kembali ke titik awal level entry ($${lastCompleted.entryPrice.toFixed(2)}). Namun jika muncul sinyal ${isBuy ? "SELL" : "BUY"} baru, Re-Entry batal dan prioritas mutlak mengikuti sinyal baru tersebut.`
                         : "Posisi sebelumnya telah selesai (TP/BE/Pembalikan Sinyal). Radar memprioritaskan dan menunggu setup sinyal tren berikutnya."}
                     </p>
                   </div>
@@ -674,7 +680,7 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
             )}
           </div>
         ) : (
-          filteredSignals.map((sig) => {
+          filteredSignals.map((sig, idx) => {
             const isBuy = sig.signalType.includes("BUY");
             const price = sig.entryPrice.toFixed(3);
             const isLive = sig.status === "ACTIVE";
@@ -683,7 +689,7 @@ export const SignalsListView: React.FC<SignalsListViewProps> = ({
 
             return (
               <div
-                key={sig.id}
+                key={`${sig.id}-${idx}`}
                 onClick={() => {
                   if (isLocked && onOpenPaywall) {
                     onOpenPaywall();

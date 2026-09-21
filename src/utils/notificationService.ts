@@ -240,21 +240,30 @@ class NotificationService {
         outputArray[i] = rawData.charCodeAt(i);
       }
 
-      // Subscribe to PushManager
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: outputArray,
-      });
+      // Check existing subscription first
+      let subscription = await registration.pushManager.getSubscription();
 
-      // Send subscription object to server
-      await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription),
-      });
+      // If already subscribed, verify and send to server to make sure it's alive
+      if (!subscription) {
+        // Subscribe fresh
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: outputArray,
+        });
+      }
 
-      console.log("[NotificationService] Web Push successfully registered with server.");
-      return true;
+      if (subscription) {
+        // Send subscription object to server
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(subscription),
+        });
+
+        console.log("[NotificationService] Web Push successfully registered with server.");
+        return true;
+      }
+      return false;
     } catch (err) {
       console.warn("[NotificationService] Web Push subscription note:", err);
       return false;

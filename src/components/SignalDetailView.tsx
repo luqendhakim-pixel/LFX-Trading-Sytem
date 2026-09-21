@@ -369,24 +369,26 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
       {/* Main Signal Card (Matching dark deep blue card in screenshots) */}
       <div className="bg-gradient-to-b from-[#0e162c] to-[#080d1b] border border-slate-800/80 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4">
         {/* Signal Header Action Pill & Status */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <span
-              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-black tracking-wider uppercase border ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black tracking-wider uppercase border leading-none shadow-sm shrink-0 ${
                 isBuy
                   ? "bg-emerald-950/80 text-emerald-400 border-emerald-500/40"
                   : "bg-rose-950/80 text-rose-400 border-rose-500/40"
               }`}
             >
-              {isBuy ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              {isBuy ? "BUY" : "SELL"}
+              {isBuy ? <TrendingUp className="w-3.5 h-3.5 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 shrink-0" />}
+              <span>{isBuy ? "BUY" : "SELL"}</span>
             </span>
-            <span className="text-xl sm:text-2xl font-black text-white tracking-tight">{symbol}</span>
+            <span className="text-xl sm:text-2xl font-black text-white tracking-tight leading-none truncate">
+              {symbol}
+            </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <span
-              className={`text-xs font-mono font-black px-2 py-0.5 rounded-lg border ${
+              className={`inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-xs font-mono font-bold tracking-tight border shadow-sm shrink-0 whitespace-nowrap leading-none ${
                 floatingPips > 0
                   ? "bg-emerald-950/80 text-emerald-400 border-emerald-500/40"
                   : floatingPips === 0
@@ -394,14 +396,18 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
                   : "bg-rose-950/80 text-rose-400 border-rose-500/40"
               }`}
             >
-              {floatingPips > 0 ? `+${floatingPips}` : floatingPips} pips {!isLive ? "(CLOSED)" : ""}
+              <span>{floatingPips > 0 ? `+${floatingPips}` : floatingPips} pips</span>
+              {!isLive && <span className="ml-1 text-[10px] text-slate-400 font-sans font-normal">(CLOSED)</span>}
             </span>
             <span
-              className={`px-3 py-0.5 rounded-full text-xs font-black tracking-wide border uppercase whitespace-nowrap ${getStatusBadge(
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide border uppercase whitespace-nowrap shadow-sm leading-none shrink-0 ${getStatusBadge(
                 currentStatus
               )}`}
             >
-              {getStatusLabel(currentStatus)}
+              {isLive && currentStatus === "ACTIVE" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              )}
+              <span>{getStatusLabel(currentStatus)}</span>
             </span>
           </div>
         </div>
@@ -460,11 +466,8 @@ export const SignalDetailView: React.FC<SignalDetailViewProps> = ({
         {/* 4 Metric Grid (ENTRY, STOP LOSS, RISK / REWARD, SESI) */}
         <div className="grid grid-cols-2 gap-y-3 gap-x-4 pt-2 border-t border-slate-800/60 font-mono">
           <div>
-            <div className="text-[11px] font-sans font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <span>ENTRY</span>
-              <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-bold ${isBuy ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/20 text-rose-400 border border-rose-500/30"}`}>
-                {isBuy ? "Garis Hijau" : "Garis Merah"}
-              </span>
+            <div className="text-[11px] font-sans font-semibold text-slate-400 uppercase tracking-wider">
+              ENTRY
             </div>
             <div className="text-lg sm:text-xl font-black text-slate-100 tracking-tight">
               {entry.toFixed(2)}

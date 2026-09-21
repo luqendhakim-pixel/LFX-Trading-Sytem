@@ -1,4 +1,4 @@
-import { AISignalServer } from "./signalEngineServer";
+import type { AISignalServer } from "./signalEngineServer";
 
 function createSignalItem(
   dateStr: string,

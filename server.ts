@@ -12,6 +12,7 @@ import {
   signalEngineServer,
   getVapidPublicKey,
   addPushSubscription,
+  broadcastPushNotification,
 } from "./server/signalEngineServer";
 import dotenv from "dotenv";
 
@@ -276,6 +277,22 @@ app.post("/api/auth/send-otp", (req, res) => {
 
   const cleanIdentifier = String(identifier).trim().toLowerCase();
   const cleanMethod = authMethod === "WHATSAPP" ? "WHATSAPP" : "EMAIL";
+  const isAdmin = cleanIdentifier === ADMIN_EMAIL || cleanIdentifier === ADMIN_PHONE || cleanIdentifier.includes("admin");
+  const now = Date.now();
+
+  // Strict check: If user already used their 7-day trial and it expired without active subscription
+  const existingUser = usersDb.get(cleanIdentifier);
+  if (existingUser && !isAdmin && existingUser.role !== "ADMIN") {
+    const isSubscribed = existingUser.subscriptionEndsAt && existingUser.subscriptionEndsAt > now;
+    if (!isSubscribed && existingUser.trialEndsAt <= now) {
+      return res.status(403).json({
+        success: false,
+        trialExpired: true,
+        expiredAt: existingUser.trialEndsAt,
+        message: `Masa Free Trial 7 Hari untuk akun ${cleanIdentifier} telah berakhir. Akun ini tidak dapat mengakses aplikasi kembali. Silakan hubungi Admin untuk aktivasi paket VIP.`,
+      });
+    }
+  }
 
   // Generate 6 digit OTP
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -319,6 +336,20 @@ app.post("/api/auth/login-password", (req, res) => {
         message: "Password salah! Silakan periksa kembali kata sandi Anda.",
       });
     }
+
+    // If user attempted to register again with same identifier
+    if (isRegister) {
+      const isSubscribed = user.subscriptionEndsAt && user.subscriptionEndsAt > now;
+      if (!isAdmin && !isSubscribed && user.trialEndsAt <= now) {
+        return res.status(403).json({
+          success: false,
+          trialExpired: true,
+          expiredAt: user.trialEndsAt,
+          message: `Akun (${cleanEmail}) sudah pernah didaftarkan dan masa Free Trial 7 Hari telah habis. Akun tidak dapat mengakses aplikasi kembali. Silakan hubungi Admin untuk berlangganan VIP.`,
+        });
+      }
+    }
+
     // Save updated password if provided
     if (password && !user.password) {
       user.password = String(password).trim();
@@ -358,6 +389,24 @@ app.post("/api/auth/login-password", (req, res) => {
   } else {
     status = "TRIAL_EXPIRED";
     daysRemaining = 0;
+  }
+
+  // STRICT LOCKOUT: If trial is expired and user has no active VIP subscription and is not admin
+  if (status === "TRIAL_EXPIRED") {
+    return res.status(403).json({
+      success: false,
+      trialExpired: true,
+      expiredAt: user.trialEndsAt,
+      message: `Masa Free Trial 7 Hari untuk akun (${cleanEmail}) telah berakhir. Sesuai kebijakan, akun Anda telah dikunci dan tidak dapat mengakses aplikasi kembali. Silakan hubungi Admin WhatsApp untuk aktivasi paket VIP.`,
+      user: {
+        id: user.id,
+        name: user.name,
+        identifier: cleanEmail,
+        status: "TRIAL_EXPIRED",
+        isSubscriptionActive: false,
+        daysRemaining: 0,
+      },
+    });
   }
 
   return res.json({
@@ -434,6 +483,24 @@ app.post("/api/auth/verify-otp", (req, res) => {
     daysRemaining = 0;
   }
 
+  // STRICT LOCKOUT: If trial is expired and user has no active VIP subscription and is not admin
+  if (status === "TRIAL_EXPIRED") {
+    return res.status(403).json({
+      success: false,
+      trialExpired: true,
+      expiredAt: user.trialEndsAt,
+      message: `Masa Free Trial 7 Hari untuk akun (${cleanIdentifier}) telah berakhir. Akun Anda telah dikunci dan tidak dapat mengakses aplikasi kembali. Silakan hubungi Admin untuk aktivasi paket VIP.`,
+      user: {
+        id: user.id,
+        name: user.name,
+        identifier: cleanIdentifier,
+        status: "TRIAL_EXPIRED",
+        isSubscriptionActive: false,
+        daysRemaining: 0,
+      },
+    });
+  }
+
   return res.json({
     success: true,
     message: isAdmin
@@ -445,6 +512,40 @@ app.post("/api/auth/verify-otp", (req, res) => {
       isSubscriptionActive: status === "ADMIN" || status === "SUBSCRIBED" || status === "TRIAL_ACTIVE",
       daysRemaining,
     },
+  });
+});
+
+// 2B. Session & Trial Status Check
+app.post("/api/auth/check-status", (req, res) => {
+  const { identifier } = req.body;
+  if (!identifier) return res.json({ valid: false });
+  const cleanId = String(identifier).trim().toLowerCase();
+  const isAdmin = cleanId === ADMIN_EMAIL || cleanId === ADMIN_PHONE;
+  if (isAdmin) return res.json({ valid: true, status: "ADMIN", isSubscriptionActive: true });
+
+  const user = usersDb.get(cleanId);
+  if (!user) return res.json({ valid: true });
+
+  const now = Date.now();
+  const isSubscribed = user.subscriptionEndsAt && user.subscriptionEndsAt > now;
+  const isTrial = user.trialEndsAt > now;
+
+  if (!isSubscribed && !isTrial) {
+    return res.status(403).json({
+      valid: false,
+      trialExpired: true,
+      expiredAt: user.trialEndsAt,
+      message: `Masa Free Trial 7 Hari untuk akun ${cleanId} telah berakhir.`,
+    });
+  }
+
+  return res.json({
+    valid: true,
+    status: isSubscribed ? "SUBSCRIBED" : "TRIAL_ACTIVE",
+    isSubscriptionActive: true,
+    daysRemaining: isSubscribed
+      ? Math.max(1, Math.ceil((user.subscriptionEndsAt - now) / (24 * 60 * 60 * 1000)))
+      : Math.max(1, Math.ceil((user.trialEndsAt - now) / (24 * 60 * 60 * 1000))),
   });
 });
 
@@ -873,33 +974,35 @@ interface EconomicCalendarItem {
 
 let cachedEconomicEvents: EconomicCalendarItem[] = [];
 let lastCalendarFetchTime = 0;
-const CALENDAR_CACHE_TTL_MS = 60 * 1000; // 1 minute cache
+const CALENDAR_CACHE_TTL_MS = 45 * 1000; // 45 seconds cache
 
 function generateDynamicInstitutionalCalendar(): EconomicCalendarItem[] {
   const now = new Date();
-  const baseTime愚 = now.getTime();
-
   const dayNamesId = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
   const monthNamesId = [
     "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
     "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
   ];
 
-  // Helper to format date label relative to today in WIB
+  // Helper to format date label relative to today in WIB (UTC+7)
   const formatDateLabel = (targetDate: Date): string => {
-    const todayStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-    const targetStr = `${targetDate.getFullYear()}-${targetDate.getMonth()}-${targetDate.getDate()}`;
-    const diffDays自由 = Math.round((targetDate.getTime() - new Date(todayStr).getTime()) / (24 * 3600 * 1000));
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const target = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    const diffDays = Math.round((target.getTime() - today.getTime()) / (24 * 3600 * 1000));
 
-    if (diffDays自由 === 0) return "Hari Ini";
-    if (diffDays自由 === 1) return "Besok";
-    if (diffDays自由 === 2) return "Lusa";
-    if (diffDays自由 === -1) return "Kemarin";
+    if (diffDays === 0) return "Hari Ini";
+    if (diffDays === 1) return "Besok";
+    if (diffDays === 2) return "Lusa";
+    if (diffDays === -1) return "Kemarin";
     return `${dayNamesId[targetDate.getDay()]}, ${targetDate.getDate()} ${monthNamesId[targetDate.getMonth()]}`;
   };
 
   const currentDayOfWeek = now.getDay();
-  const distanceToMonday = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+  // If Sunday (0) or Saturday (6), anchor to the upcoming Monday
+  let distanceToMonday = 1 - currentDayOfWeek;
+  if (currentDayOfWeek === 0) distanceToMonday = 1; // Tomorrow
+  else if (currentDayOfWeek === 6) distanceToMonday = 2; // In 2 days
+
   const mondayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + distanceToMonday);
 
   const weeklySchedule = [
@@ -1017,7 +1120,7 @@ function generateDynamicInstitutionalCalendar(): EconomicCalendarItem[] {
     },
     {
       id: "us-uom-sentiment",
-      title: "US Prelim UoM Consumer Sentiment & Inflation Exp",
+      title: "US Prelim UoM Consumer Sentiment",
       country: "US",
       currency: "USD",
       impact: "MEDIUM" as const,
@@ -1028,7 +1131,7 @@ function generateDynamicInstitutionalCalendar(): EconomicCalendarItem[] {
       previous: "67.9",
       actualIfPassed: "68.2",
       goldImpactEffect: "Sentimen konsumen melemah mencerminkan penurunan daya beli masyarakat AS dan menahan penguatan Dolar.",
-      description: "Survei bulanan University of Michigan terhadap persepsi konsumen terhadap kondisi finansial.",
+      description: "Survei bulanan University of Michigan terhadap persepsi konsumen.",
       category: "SENTIMENT" as const,
     },
     {
@@ -1037,7 +1140,7 @@ function generateDynamicInstitutionalCalendar(): EconomicCalendarItem[] {
       country: "US",
       currency: "USD",
       impact: "HIGH" as const,
-      dayIndex: 7,
+      dayIndex: 5,
       hourWib: 1,
       minWib: 0,
       forecast: "5.25%",
@@ -1095,44 +1198,74 @@ function generateDynamicInstitutionalCalendar(): EconomicCalendarItem[] {
   });
 }
 
-async function fetchLiveEconomicCalendarFromFeed(): Promise<EconomicCalendarItem[]> {
-  // If cache is fresh, return cached
-  if (cachedEconomicEvents.length > 0 && Date.now() - lastCalendarFetchTime < CALENDAR_CACHE_TTL_MS) {
+async function fetchLiveEconomicCalendarFromFeed(forceRefresh: boolean = false): Promise<EconomicCalendarItem[]> {
+  // If cache is fresh and not forced, return cached
+  if (!forceRefresh && cachedEconomicEvents.length > 0 && Date.now() - lastCalendarFetchTime < CALENDAR_CACHE_TTL_MS) {
     return cachedEconomicEvents;
   }
 
+  const now = new Date();
+  const dayNamesId = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+  const monthNamesId = [
+    "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+    "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
+  ];
+
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
+    const timeout = setTimeout(() => controller.abort(), 4500);
 
-    // ForexFactory Live Weekly Economic Calendar Feed
-    const res = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json", {
+    // Query TradingView's official economic calendar for US, EU, and GB from past 24h to next 7 days
+    const fromDate = new Date(now.getTime() - 24 * 3600 * 1000).toISOString();
+    const toDate = new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString();
+    const tvUrl = `https://economic-calendar.tradingview.com/events?from=${fromDate}&to=${toDate}&countries=US,EU,GB`;
+
+    const res = await fetch(tvUrl, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        Accept: "application/json",
+        "Origin": "https://www.tradingview.com",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "Accept": "application/json",
       },
     });
     clearTimeout(timeout);
 
     if (res.ok) {
-      const rawData = await res.json();
-      if (Array.isArray(rawData) && rawData.length > 0) {
-        const nowMs = Date.now();
-        const relevantEvents = rawData
-          .filter((item: any) => {
-            const country = (item.country || "").toUpperCase();
-            const impact = (item.impact || "").toLowerCase();
-            // Focus on USD, and major high-impact EUR/GBP that sway DXY/Gold
-            const isUsd = country === "USD";
-            const isMajor = country === "EUR" || country === "GBP";
-            const isHighOrMed = impact === "high" || impact === "medium";
-            return (isUsd && isHighOrMed) || (isMajor && impact === "high");
-          })
-          .slice(0, 15);
+      const data = await res.json();
+      const rawEvents: any[] = data.result || [];
 
-        if (relevantEvents.length > 0) {
-          const parsedEvents: EconomicCalendarItem[] = relevantEvents.map((item: any, idx: number) => {
+      if (Array.isArray(rawEvents) && rawEvents.length > 0) {
+        const nowMs = Date.now();
+
+        // Filter for relevant events: USD, EU, GB with medium/high importance or key macroeconomic keywords
+        const filtered = rawEvents.filter((item) => {
+          const imp = typeof item.importance === "number" ? item.importance : 0;
+          const title = (item.title || "").toLowerCase();
+          const country = (item.country || "US").toUpperCase();
+          const isUsd = country === "US";
+          const isKeyKeyword =
+            title.includes("pmi") ||
+            title.includes("fomc") ||
+            title.includes("fed") ||
+            title.includes("cpi") ||
+            title.includes("ppi") ||
+            title.includes("gdp") ||
+            title.includes("payrolls") ||
+            title.includes("nfp") ||
+            title.includes("unemployment") ||
+            title.includes("speech") ||
+            title.includes("orders") ||
+            title.includes("rate") ||
+            title.includes("summit") ||
+            title.includes("sentiment") ||
+            title.includes("claims");
+
+          if (isUsd) return imp >= 0 || isKeyKeyword;
+          return imp >= 1 || (imp >= 0 && isKeyKeyword);
+        });
+
+        if (filtered.length > 0) {
+          const parsedEvents: EconomicCalendarItem[] = filtered.map((item: any, idx: number) => {
             const itemDate = new Date(item.date);
             const scheduledMs = isNaN(itemDate.getTime()) ? nowMs + idx * 3600000 : itemDate.getTime();
             const diffMinutes = Math.round((scheduledMs - nowMs) / 60000);
@@ -1142,66 +1275,89 @@ async function fetchLiveEconomicCalendarFromFeed(): Promise<EconomicCalendarItem
             const wibMinutes = itemDate.getUTCMinutes();
             const timeStrWib = `${String(wibHours).padStart(2, "0")}:${String(wibMinutes).padStart(2, "0")} WIB`;
 
-            // Format date relative label
-            const nowDate = new Date();
+            // Format date relative label in WIB
             const diffDays = Math.round((scheduledMs - nowMs) / (24 * 3600 * 1000));
             let dateStr = "Hari Ini";
             if (diffDays === 1) dateStr = "Besok";
             else if (diffDays === 2) dateStr = "Lusa";
             else if (diffDays === -1) dateStr = "Kemarin";
-            else if (diffDays > 2) {
-              const daysArr = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-              dateStr = `${daysArr[itemDate.getDay()]}`;
+            else {
+              const localWibDate = new Date(scheduledMs + 7 * 3600 * 1000);
+              dateStr = `${dayNamesId[localWibDate.getUTCDay()]}, ${localWibDate.getUTCDate()} ${monthNamesId[localWibDate.getUTCMonth()]}`;
             }
 
-            const impactUpper = (item.impact || "HIGH").toUpperCase() as "HIGH" | "MEDIUM" | "LOW";
+            const title = item.title || "US Macroeconomic Event";
+            const titleLower = title.toLowerCase();
+
+            // Impact mapping: 1 = HIGH, 0 = MEDIUM, -1 = LOW
+            let impactUpper: "HIGH" | "MEDIUM" | "LOW" =
+              item.importance === 1 ? "HIGH" : item.importance === 0 ? "MEDIUM" : "LOW";
+
+            if (
+              titleLower.includes("fomc") ||
+              titleLower.includes("interest rate") ||
+              titleLower.includes("cpi") ||
+              titleLower.includes("non-farm payrolls") ||
+              titleLower.includes("nfp") ||
+              titleLower.includes("gdp") ||
+              titleLower.includes("durable goods") ||
+              titleLower.includes("summit")
+            ) {
+              impactUpper = "HIGH";
+            }
 
             let status: "UPCOMING" | "LIVE_NOW" | "RELEASED" = "UPCOMING";
-            if (item.actual && item.actual.trim() !== "") {
+            const hasActual = item.actual != null && String(item.actual).trim() !== "";
+            if (hasActual || diffMinutes < -20) {
               status = "RELEASED";
-            } else if (diffMinutes < -15) {
-              status = "RELEASED";
-            } else if (diffMinutes >= -15 && diffMinutes <= 15) {
+            } else if (diffMinutes >= -20 && diffMinutes <= 20) {
               status = "LIVE_NOW";
             }
 
-            // Determine Gold Impact Insight
-            const title = item.title || "Economic Event";
-            let goldEffect = "Dolar menguat jika data lebih tinggi dari perkiraan, memicu potensi koreksi pada XAU/USD.";
+            // Determine Category & Gold Impact Insight
             let cat: "INFLATION" | "EMPLOYMENT" | "CENTRAL_BANK" | "GROWTH" | "SENTIMENT" = "GROWTH";
+            let goldEffect = "Dolar menguat jika data lebih tinggi dari perkiraan, memicu potensi koreksi pada XAU/USD.";
 
-            if (title.toLowerCase().includes("cpi") || title.toLowerCase().includes("ppi") || title.toLowerCase().includes("inflation")) {
+            if (titleLower.includes("cpi") || titleLower.includes("ppi") || titleLower.includes("inflation") || titleLower.includes("pce")) {
               cat = "INFLATION";
               goldEffect = "Aktual > Forecast → Tekanan Jual Gold (Bearish). Aktual < Forecast → Emas Berpotensi Rally (Bullish).";
-            } else if (title.toLowerCase().includes("payrolls") || title.toLowerCase().includes("nfp") || title.toLowerCase().includes("unemployment") || title.toLowerCase().includes("claims")) {
+            } else if (titleLower.includes("payrolls") || titleLower.includes("nfp") || titleLower.includes("unemployment") || titleLower.includes("claims") || titleLower.includes("adp")) {
               cat = "EMPLOYMENT";
-              goldEffect = "Pasar tenaga kerja kuat menguatkan DXY dan menekan emas Spot. Data lemah mendorong lonjakan harga emas.";
-            } else if (title.toLowerCase().includes("fomc") || title.toLowerCase().includes("rate") || title.toLowerCase().includes("fed") || title.toLowerCase().includes("powell")) {
+              goldEffect = "Pasar tenaga kerja kuat menguatkan DXY dan menekan emas Spot. Data meleset lemah mendorong lonjakan harga emas.";
+            } else if (titleLower.includes("fomc") || titleLower.includes("rate") || titleLower.includes("fed") || titleLower.includes("powell") || titleLower.includes("speech") || titleLower.includes("summit")) {
               cat = "CENTRAL_BANK";
-              goldEffect = "Pernyataan Dovish/Pemotongan Suku Bunga → XAU/USD Bullish Kuat. Hawkish → Tekanan Bearish.";
-            } else if (title.toLowerCase().includes("pmi") || title.toLowerCase().includes("confidence") || title.toLowerCase().includes("sentiment")) {
+              goldEffect = "Pernyataan Dovish/Sinyal Pemangkasan Bunga → XAU/USD Bullish Kuat. Hawkish/Proteksionis → Tekanan Bearish.";
+            } else if (titleLower.includes("pmi") || titleLower.includes("sentiment") || titleLower.includes("confidence")) {
               cat = "SENTIMENT";
-              goldEffect = "Kontraksi di bawah 50 memicu arus safe-haven ke emas spot.";
+              goldEffect = "Angka di bawah 50 (kontraksi) memicu arus safe-haven ke emas Spot XAU/USD.";
             }
 
+            const country = (item.country || "US").toUpperCase();
+            const currency = item.currency || (country === "US" ? "USD" : country === "EU" ? "EUR" : "GBP");
+
             return {
-              id: `ff-event-${idx}-${scheduledMs}`,
-              title: item.title || "US Macro Event",
-              country: (item.country || "US").toUpperCase(),
-              currency: (item.country || "USD").toUpperCase(),
+              id: `tv-event-${item.id || idx}-${scheduledMs}`,
+              title,
+              country,
+              currency,
               impact: impactUpper,
               dateStr,
               timeStrWib,
               scheduledTimestamp: scheduledMs,
-              forecast: item.forecast || "N/A",
-              previous: item.previous || "N/A",
-              actual: item.actual && item.actual.trim() !== "" ? item.actual : undefined,
+              forecast: item.forecast != null ? String(item.forecast) : "—",
+              previous: item.previous != null ? String(item.previous) : "—",
+              actual: hasActual ? String(item.actual) : undefined,
               goldImpactEffect: goldEffect,
-              description: `Peristiwa fundamental ${item.country} tingkat ${item.impact}. Berpotensi mempengaruhi volatilitas pasangan XAU/USD secara signifikan.`,
+              description:
+                item.comment ||
+                `Peristiwa fundamental ${country} kategori ${cat}. Berpotensi mempengaruhi volatilitas dan likuiditas XAU/USD.`,
               category: cat,
               status,
             };
           });
+
+          // Sort chronologically: nearest future first, then past
+          parsedEvents.sort((a, b) => a.scheduledTimestamp - b.scheduledTimestamp);
 
           cachedEconomicEvents = parsedEvents;
           lastCalendarFetchTime = Date.now();
@@ -1210,10 +1366,10 @@ async function fetchLiveEconomicCalendarFromFeed(): Promise<EconomicCalendarItem
       }
     }
   } catch (err) {
-    // Silent fallback to institutional calendar
+    // Fallback if network blocked
   }
 
-  // Fallback to dynamic calendar
+  // Fallback to dynamic rolling institutional calendar
   const fallbackEvents = generateDynamicInstitutionalCalendar();
   cachedEconomicEvents = fallbackEvents;
   lastCalendarFetchTime = Date.now();
@@ -1222,11 +1378,12 @@ async function fetchLiveEconomicCalendarFromFeed(): Promise<EconomicCalendarItem
 
 // Endpoint for Live Economic News Calendar
 app.get("/api/market/economic-calendar", async (req, res) => {
+  const isForce = req.query.refresh === "true" || req.query.force === "true";
   try {
-    const events = await fetchLiveEconomicCalendarFromFeed();
+    const events = await fetchLiveEconomicCalendarFromFeed(isForce);
     res.json({
       success: true,
-      source: "ForexFactory Real-Time Fundamental Feed & Institutional Macro Engine",
+      source: "TradingView Live Fundamental Feed & Macro Calendar",
       lastUpdated: new Date().toISOString(),
       timestampMs: Date.now(),
       total: events.length,
@@ -2073,6 +2230,21 @@ app.post("/api/push/subscribe", (req, res) => {
     const subscription = req.body;
     const added = addPushSubscription(subscription);
     res.json({ success: added });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Test push broadcast to registered devices
+app.post("/api/push/test", async (req, res) => {
+  try {
+    await broadcastPushNotification(
+      "🚨 TEST NOTIFIKASI REAL-TIME SERVER 🚨",
+      "Koneksi server background LFX berhasil! Notifikasi ini dikirim langsung dari server Cloud ke bilah status HP Anda.",
+      "/",
+      `test-push-${Date.now()}`
+    );
+    res.json({ success: true, message: "Push broadcast test sent" });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
