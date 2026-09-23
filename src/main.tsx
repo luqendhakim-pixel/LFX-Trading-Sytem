@@ -5,16 +5,15 @@ import './index.css';
 
 // Register Service Worker for Android Chrome PWA / Add to Homescreen with custom LFX icon
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((reg) => {
-        console.log('[LFX PWA] Service Worker active:', reg.scope);
-      })
-      .catch((err) => {
-        console.warn('[LFX PWA] Service Worker registration failed:', err);
-      });
-  });
+  navigator.serviceWorker
+    .register('/sw.js', { scope: '/' })
+    .then((reg) => {
+      reg.update().catch(() => {});
+      console.log('[LFX PWA] Service Worker active:', reg.scope);
+    })
+    .catch((err) => {
+      console.warn('[LFX PWA] Service Worker registration failed:', err);
+    });
 }
 
 createRoot(document.getElementById('root')!).render(

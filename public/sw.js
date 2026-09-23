@@ -43,31 +43,33 @@ self.addEventListener('activate', (event) => {
 // Background Push & Mobile Status Bar Notification Support
 self.addEventListener('push', (event) => {
   let data = {
-    title: '🚨 SINYAL XAU/USD BARU (LFX Trading System)',
-    body: 'Sinyal baru terkonfirmasi di terminal LFX. Buka aplikasi untuk rincian Entry, SL 50 pips, & TP1-4.',
+    title: '🚨 SINYAL XAU/USD (LFX Trading System)',
+    body: 'Pembaruan sinyal trading emas real-time.',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    tag: 'gold-signal-alert',
-    vibrate: [200, 100, 200, 100, 300],
+    tag: `lfx-push-${Date.now()}`,
+    vibrate: [300, 100, 300, 100, 400],
     data: { url: '/' }
   };
 
   if (event.data) {
     try {
-      data = event.data.json();
+      data = { ...data, ...event.data.json() };
     } catch (e) {
       data.body = event.data.text();
     }
   }
 
   const options = {
-    body: data.body,
+    body: data.body || '',
     icon: data.icon || '/icon-192.png',
     badge: data.badge || '/icon-192.png',
     tag: data.tag || `lfx-signal-${Date.now()}`,
-    vibrate: data.vibrate || [200, 100, 200, 100, 300],
+    vibrate: data.vibrate || [300, 100, 300, 100, 400],
     renotify: true,
-    requireInteraction: false,
+    requireInteraction: true, // Keep notification visible on phone lockscreen / status bar
+    silent: false,
+    timestamp: Date.now(),
     data: data.data || { url: '/' },
     actions: [
       { action: 'open_signal', title: '📈 Buka Sinyal' },
@@ -76,7 +78,18 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title, options)
+    self.registration.showNotification(data.title, options).catch((err) => {
+      console.warn('SW showNotification fallback:', err);
+      return self.registration.showNotification(data.title, {
+        body: options.body,
+        icon: options.icon,
+        badge: options.badge,
+        tag: options.tag,
+        vibrate: options.vibrate,
+        renotify: true,
+        data: options.data
+      });
+    })
   );
 });
 

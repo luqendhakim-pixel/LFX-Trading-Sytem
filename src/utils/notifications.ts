@@ -1,5 +1,6 @@
 import { AISignal, MobileNotification, Timeframe } from "../types";
 import { soundManager } from "./audio";
+import { notificationService } from "./notificationService";
 
 // Request native browser Web Notification permission
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
@@ -8,6 +9,9 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   }
   try {
     const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      notificationService.registerWebPushSubscription().catch(() => {});
+    }
     return permission;
   } catch (e) {
     console.warn("Notification permission request error:", e);

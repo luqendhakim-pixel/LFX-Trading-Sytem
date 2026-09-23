@@ -83,11 +83,13 @@ const STATE_FILE = path.join(DATA_DIR, "lfx_signals_state.json");
 const SUBS_FILE = path.join(DATA_DIR, "lfx_push_subscriptions.json");
 const VAPID_FILE = path.join(DATA_DIR, "lfx_vapid.json");
 
-// Setup Web Push VAPID keys
-let vapidKeys = {
-  publicKey: "",
-  privateKey: "",
+// Setup Web Push VAPID keys (Fixed permanent keys to prevent invalidation on server restart)
+const DEFAULT_VAPID_KEYS = {
+  publicKey: "BF6BNiFS4HuBr8Z6kpBB1zi-h4Bdcgex8nUTyv-hPI0k-Pb0R0_3X1S5KAiww7PIDd2EYNjrv5T5hEbomJDoULE",
+  privateKey: "rNtvvGm34Wo3lIqgKZxfhmTlcuziYQC35jHP7J_1BJ4",
 };
+
+let vapidKeys = { ...DEFAULT_VAPID_KEYS };
 
 function initVapid(): void {
   try {
@@ -95,14 +97,17 @@ function initVapid(): void {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     if (fs.existsSync(VAPID_FILE)) {
-      const saved = JSON.parse(fs.readFileSync(VAPID_FILE, "utf-8"));
-      if (saved.publicKey && saved.privateKey) {
-        vapidKeys = saved;
+      try {
+        const saved = JSON.parse(fs.readFileSync(VAPID_FILE, "utf-8"));
+        if (saved.publicKey && saved.privateKey) {
+          vapidKeys = saved;
+        }
+      } catch (err) {
+        // Fallback to default
+        vapidKeys = { ...DEFAULT_VAPID_KEYS };
       }
-    }
-    if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
-      vapidKeys = webpush.generateVAPIDKeys();
-      fs.writeFileSync(VAPID_FILE, JSON.stringify(vapidKeys, null, 2), "utf-8");
+    } else {
+      fs.writeFileSync(VAPID_FILE, JSON.stringify(DEFAULT_VAPID_KEYS, null, 2), "utf-8");
     }
 
     webpush.setVapidDetails(
@@ -110,7 +115,7 @@ function initVapid(): void {
       vapidKeys.publicKey,
       vapidKeys.privateKey
     );
-    console.log("[WebPush] VAPID keys loaded successfully.");
+    console.log("[WebPush] Permanent VAPID keys initialized successfully.");
   } catch (e) {
     console.warn("[WebPush] Error setting up VAPID keys:", e);
   }
@@ -140,6 +145,7 @@ function loadPushSubscriptions(): void {
       const data = JSON.parse(fs.readFileSync(SUBS_FILE, "utf-8"));
       if (Array.isArray(data)) {
         pushSubscriptions = data;
+        console.log(`[WebPush] Loaded ${pushSubscriptions.length} registered push subscriber(s) from disk.`);
       }
     }
   } catch (e) {
@@ -160,8 +166,15 @@ function savePushSubscriptions(): void {
 
 loadPushSubscriptions();
 
+export function getSubscriberCount(): number {
+  return pushSubscriptions.length;
+}
+
 export function addPushSubscription(sub: any): boolean {
-  if (!sub || !sub.endpoint || !sub.keys) return false;
+  if (!sub || !sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
+    console.warn("[WebPush] Received invalid subscription object:", JSON.stringify(sub).slice(0, 100));
+    return false;
+  }
   const existingIndex = pushSubscriptions.findIndex((s) => s.endpoint === sub.endpoint);
   const record: PushSub = {
     endpoint: sub.endpoint,
@@ -174,16 +187,21 @@ export function addPushSubscription(sub: any): boolean {
 
   if (existingIndex >= 0) {
     pushSubscriptions[existingIndex] = record;
+    console.log(`[WebPush] Refreshed subscription for endpoint. Total subscribers: ${pushSubscriptions.length}`);
   } else {
     pushSubscriptions.push(record);
+    console.log(`[WebPush] New subscriber registered! Total subscribers: ${pushSubscriptions.length}`);
   }
   savePushSubscriptions();
-  console.log(`[WebPush] Subscription saved. Total subscribers: ${pushSubscriptions.length}`);
   return true;
 }
 
 export async function broadcastPushNotification(title: string, body: string, dataUrl: string = "/", tag?: string) {
-  if (pushSubscriptions.length === 0) return;
+  if (pushSubscriptions.length === 0) {
+    console.log(`[WebPush] Broadcast requested ("${title}"), but no push subscribers are currently registered.`);
+    return;
+  }
+
   const payload = JSON.stringify({
     title,
     body,
@@ -191,10 +209,13 @@ export async function broadcastPushNotification(title: string, body: string, dat
     badge: "/icon-192.png",
     tag: tag || `lfx-push-${Date.now()}`,
     vibrate: [300, 100, 300, 100, 400],
-    data: { url: dataUrl },
+    data: { url: dataUrl, timestamp: Date.now() },
   });
 
+  console.log(`[WebPush] 📲 Broadcasting to ${pushSubscriptions.length} device(s): "${title}"`);
+
   const staleEndpoints: string[] = [];
+  let successfulDeliveries = 0;
 
   for (const sub of pushSubscriptions) {
     try {
@@ -205,23 +226,27 @@ export async function broadcastPushNotification(title: string, body: string, dat
         },
         payload,
         {
-          TTL: 60, // Deliver within 60 seconds or drop (prevents delayed stale alerts)
-          urgency: "high", // Tell FCM / APNs to wake up the device immediately even in battery saver / doze mode
+          TTL: 86400, // 24 hours TTL so lock-screen/doze mode devices receive it reliably
+          urgency: "high", // High urgency for Android/iOS wake-up
         }
       );
+      successfulDeliveries++;
     } catch (err: any) {
       if (err.statusCode === 404 || err.statusCode === 410) {
         // Expired or unsubscribed
         staleEndpoints.push(sub.endpoint);
       } else {
-        console.warn("[WebPush] Delivery warning:", err.message);
+        console.warn(`[WebPush] Push delivery warning (${err.statusCode || 'network'}):`, err.message);
       }
     }
   }
 
+  console.log(`[WebPush] Broadcast complete: ${successfulDeliveries}/${pushSubscriptions.length} devices reached.`);
+
   if (staleEndpoints.length > 0) {
     pushSubscriptions = pushSubscriptions.filter((s) => !staleEndpoints.includes(s.endpoint));
     savePushSubscriptions();
+    console.log(`[WebPush] Pruned ${staleEndpoints.length} stale subscription(s). Remaining: ${pushSubscriptions.length}`);
   }
 }
 

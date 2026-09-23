@@ -4,6 +4,7 @@ import {
   requestNotificationPermission,
   getNotificationPermission,
 } from "../utils/notifications";
+import { notificationService } from "../utils/notificationService";
 import {
   Smartphone,
   Bell,
@@ -49,6 +50,10 @@ export const MobileNotificationHub: React.FC<MobileNotificationHubProps> = ({
   const handleRequestBrowserPermission = async () => {
     const perm = await requestNotificationPermission();
     setBrowserPermission(perm);
+    if (perm === "granted") {
+      await notificationService.registerWebPushSubscription();
+      await notificationService.sendServerTestPush();
+    }
   };
 
   const handleCopyNotification = (notif: MobileNotification) => {
@@ -59,7 +64,10 @@ export const MobileNotificationHub: React.FC<MobileNotificationHubProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const seenIds = new Set<string>();
   const filteredNotifs = notifications.filter((n) => {
+    if (!n || !n.id || seenIds.has(n.id)) return false;
+    seenIds.add(n.id);
     if (mobileFilter === "SIGNALS") return n.type === "SIGNAL" || n.type === "ORDER_FILLED";
     if (mobileFilter === "RESULTS") return n.type === "TP_HIT" || n.type === "SL_HIT";
     return true;
@@ -232,14 +240,14 @@ export const MobileNotificationHub: React.FC<MobileNotificationHubProps> = ({
               </p>
             </div>
           ) : (
-            filteredNotifs.map((notif) => {
+            filteredNotifs.map((notif, idx) => {
               const isSignal = notif.type === "SIGNAL";
               const isTP = notif.type === "TP_HIT";
               const isSL = notif.type === "SL_HIT";
 
               return (
                 <div
-                  key={notif.id}
+                  key={`${notif.id}-${idx}`}
                   className={`p-3 rounded-xl border text-xs relative transition shadow-sm ${
                     isTP
                       ? "bg-emerald-950/25 border-emerald-500/40 text-emerald-200"

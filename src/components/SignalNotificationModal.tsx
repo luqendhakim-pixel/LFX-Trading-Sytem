@@ -47,8 +47,11 @@ export const SignalNotificationModal: React.FC<SignalNotificationModalProps> = (
 
   if (!isOpen) return null;
 
-  // Filter logic
+  // Filter logic with deduplication
+  const seenNotifIds = new Set<string>();
   const filteredNotifications = notifications.filter((notif) => {
+    if (!notif || !notif.id || seenNotifIds.has(notif.id)) return false;
+    seenNotifIds.add(notif.id);
     if (filterType === "TP") return notif.type === "TP_HIT";
     if (filterType === "ENTRY") return notif.type === "SIGNAL" || notif.type === "ORDER_FILLED";
     if (filterType === "SL_BE") return notif.type === "SL_HIT" || notif.type === "BREAKEVEN";
@@ -94,13 +97,26 @@ export const SignalNotificationModal: React.FC<SignalNotificationModalProps> = (
     }
   };
 
-  const handleTestAlert = () => {
+  const [testStatus, setTestStatus] = useState<string | null>(null);
+
+  const handleTestAlert = async () => {
+    notificationService.playSignalSound();
     notificationService.sendMobilePush("🚨 TEST NOTIFIKASI REALTIME 🚨", {
       body: "Sinyal XAU/USD Real-time Aktif! Notifikasi berhasil terhubung dengan perangkat Anda.",
     });
-    notificationService.playSignalSound();
-    // Also trigger server-side test to verify background service worker delivery
-    fetch("/api/push/test", { method: "POST" }).catch(() => {});
+
+    if (pushNotificationEnabled) {
+      setTestStatus("Mengirim tes ke bilah HP...");
+      const res = await notificationService.sendServerTestPush();
+      if (res && res.success) {
+        setTestStatus("✓ Terkirim ke Bilah HP!");
+      } else {
+        setTestStatus("Notif lokal aktif");
+      }
+      setTimeout(() => setTestStatus(null), 3000);
+    } else {
+      onRequestPushNotification();
+    }
   };
 
   return (
@@ -174,11 +190,15 @@ export const SignalNotificationModal: React.FC<SignalNotificationModalProps> = (
 
             <button
               onClick={handleTestAlert}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-medium border border-slate-700 transition cursor-pointer"
-              title="Tes audio & push notifikasi"
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition cursor-pointer ${
+                testStatus
+                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700"
+              }`}
+              title="Tes audio & push notifikasi server ke bilah status HP"
             >
               <Volume2 className="w-3 h-3 text-cyan-400" />
-              <span>Tes Suara</span>
+              <span>{testStatus || "Tes Notif HP"}</span>
             </button>
           </div>
 
@@ -280,7 +300,7 @@ export const SignalNotificationModal: React.FC<SignalNotificationModalProps> = (
               </p>
             </div>
           ) : (
-            filteredNotifications.map((notif) => {
+            filteredNotifications.map((notif, idx) => {
               const isTp = notif.type === "TP_HIT";
               const isSl = notif.type === "SL_HIT";
               const isBe = notif.type === "BREAKEVEN";
@@ -289,7 +309,7 @@ export const SignalNotificationModal: React.FC<SignalNotificationModalProps> = (
 
               return (
                 <div
-                  key={notif.id}
+                  key={`${notif.id}-${idx}`}
                   onClick={() => handleCardClick(notif)}
                   className={`p-3.5 rounded-2xl border transition-all cursor-pointer group relative ${
                     isTp

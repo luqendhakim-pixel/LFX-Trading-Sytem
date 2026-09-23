@@ -197,6 +197,16 @@ class NotificationService {
     } catch (e) {}
   }
 
+  // Check if browser/device supports Web Push Notifications
+  isPushSupported(): boolean {
+    return (
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      "serviceWorker" in navigator &&
+      "PushManager" in window
+    );
+  }
+
   // Request browser push permission and subscribe to server Web Push
   async requestPermission(): Promise<boolean> {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -216,57 +226,128 @@ class NotificationService {
     }
   }
 
+  // Helper to convert base64 URL to Uint8Array for applicationServerKey
+  private urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
   // Register push manager subscription to backend server so alerts work 24/7 even when phone app is closed
   async registerWebPushSubscription(): Promise<boolean> {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return false;
 
     try {
-      const registration = await navigator.serviceWorker.ready;
-      if (!registration.pushManager) return false;
+      // 1. Ensure service worker registration is available
+      let registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      }
+      await navigator.serviceWorker.ready;
 
-      // Fetch VAPID public key from backend
+      if (!registration.pushManager) {
+        console.warn("[NotificationService] PushManager not supported on this browser.");
+        return false;
+      }
+
+      // 2. Fetch authoritative VAPID public key from backend
       const res = await fetch("/api/push/vapid-key");
       if (!res.ok) return false;
       const data = await res.json();
       const vapidPublicKey = data.publicKey;
       if (!vapidPublicKey) return false;
 
-      // Convert base64 VAPID key to Uint8Array
-      const padding = "=".repeat((4 - (vapidPublicKey.length % 4)) % 4);
-      const base64 = (vapidPublicKey + padding).replace(/-/g, "+").replace(/_/g, "/");
-      const rawData = window.atob(base64);
-      const outputArray = new Uint8Array(rawData.length);
-      for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-      }
+      const applicationServerKey = this.urlBase64ToUint8Array(vapidPublicKey);
 
-      // Check existing subscription first
+      // 3. Check existing subscription first
       let subscription = await registration.pushManager.getSubscription();
 
-      // If already subscribed, verify and send to server to make sure it's alive
+      if (subscription) {
+        // Verify that existing subscription's key matches the current server key
+        let keyMismatch = false;
+        if (subscription.options && subscription.options.applicationServerKey) {
+          const existingKeyBytes = new Uint8Array(subscription.options.applicationServerKey);
+          if (existingKeyBytes.length !== applicationServerKey.length) {
+            keyMismatch = true;
+          } else {
+            for (let i = 0; i < existingKeyBytes.length; i++) {
+              if (existingKeyBytes[i] !== applicationServerKey[i]) {
+                keyMismatch = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (keyMismatch) {
+          console.log("[NotificationService] VAPID key mismatch detected. Re-subscribing...");
+          await subscription.unsubscribe();
+          subscription = null;
+        }
+      }
+
+      // 4. If no valid subscription exists, subscribe fresh
       if (!subscription) {
-        // Subscribe fresh
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: outputArray,
+          applicationServerKey: applicationServerKey,
         });
       }
 
       if (subscription) {
-        // Send subscription object to server
-        await fetch("/api/push/subscribe", {
+        // Extract clean JSON payload
+        const subJson = subscription.toJSON();
+        const p256dh =
+          subJson.keys?.p256dh ||
+          (subscription.getKey
+            ? btoa(String.fromCharCode(...new Uint8Array(subscription.getKey("p256dh")!)))
+            : "");
+        const auth =
+          subJson.keys?.auth ||
+          (subscription.getKey
+            ? btoa(String.fromCharCode(...new Uint8Array(subscription.getKey("auth")!)))
+            : "");
+
+        const subscriptionPayload = {
+          endpoint: subscription.endpoint,
+          expirationTime: subscription.expirationTime || null,
+          keys: {
+            p256dh,
+            auth,
+          },
+        };
+
+        // Send subscription object to backend server
+        const postRes = await fetch("/api/push/subscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(subscription),
+          body: JSON.stringify(subscriptionPayload),
         });
 
-        console.log("[NotificationService] Web Push successfully registered with server.");
+        const postData = await postRes.json();
+        console.log("[NotificationService] Web Push successfully registered with server:", postData);
         return true;
       }
       return false;
     } catch (err) {
       console.warn("[NotificationService] Web Push subscription note:", err);
       return false;
+    }
+  }
+
+  // Send real test push notification from backend server (tests phone lock-screen delivery)
+  async sendServerTestPush(): Promise<{ success: boolean; message?: string }> {
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      const data = await res.json();
+      return data;
+    } catch (err: any) {
+      return { success: false, message: err.message };
     }
   }
 

@@ -1,0 +1,10 @@
+[
+  {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/test-endpoint-123",
+    "keys": {
+      "p256dh": "BF6BNiFS4HuBr8Z6kpBB1zi-h4Bdcgex8nUTyv-hPI0k-Pb0R0_3X1S5KAiww7PIDd2EYNjrv5T5hEbomJDoULE",
+      "auth": "rNtvvGm34Wo3lIqgKZxfhm"
+    },
+    "subscribedAt": 1790167569791
+  }
+]

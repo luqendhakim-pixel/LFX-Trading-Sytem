@@ -84,8 +84,11 @@ export const SignalWinRateHistoryModal: React.FC<SignalWinRateHistoryModalProps>
       ? dynamicHistory.monthly
       : dynamicHistory.allTime;
 
-  // Filter signals inside current period
+  // Filter signals inside current period with strict deduplication
+  const seenSignalIds = new Set<string>();
   const filteredSignals = currentMetrics.signals.filter((sig) => {
+    if (!sig || !sig.id || seenSignalIds.has(sig.id)) return false;
+    seenSignalIds.add(sig.id);
     if (outcomeFilter === "ALL") return true;
     const { isWin, isLoss, isBe } = extractSignalPips(sig);
     if (outcomeFilter === "TP") return isWin;
@@ -468,12 +471,12 @@ export const SignalWinRateHistoryModal: React.FC<SignalWinRateHistoryModalProps>
               </div>
             ) : (
               <div className="space-y-2">
-                {filteredSignals.map((sig) => {
+                {filteredSignals.map((sig, idx) => {
                   const { pips, isWin, isLoss, isBe } = extractSignalPips(sig);
 
                   return (
                     <div
-                      key={sig.id}
+                      key={`${sig.id}-${idx}`}
                       onClick={() => {
                         if (onSelectSignal) {
                           onSelectSignal(sig);

@@ -506,11 +506,18 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
                   <Smartphone className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-white">
-                    Notifikasi Sinyal Bilah Status HP
+                  <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                    Notifikasi Bilah Status HP
+                    {pushNotificationEnabled && (
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-500/40 font-mono">
+                        TERHUBUNG
+                      </span>
+                    )}
                   </h4>
                   <p className="text-[11px] text-slate-400">
-                    Muncul di lockscreen & bar notifikasi HP saat diminimize
+                    {pushNotificationEnabled
+                      ? "Sinyal Entry, TP, SL, & BE aktif masuk saat HP terkunci / aplikasi ditutup"
+                      : "Dapatkan sinyal Entry, TP, SL, & BE saat HP terkunci / aplikasi ditutup"}
                   </p>
                 </div>
               </div>
@@ -518,13 +525,19 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={onRequestPushNotification}
-                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-2.5 py-1 rounded-lg text-[11px] font-black shrink-0 shadow transition cursor-pointer"
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-black shrink-0 shadow transition cursor-pointer ${
+                    pushNotificationEnabled
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30"
+                      : "bg-amber-400 hover:bg-amber-300 text-slate-950"
+                  }`}
+                  title={pushNotificationEnabled ? "Klik untuk tes notifikasi server ke bilah HP" : "Aktifkan notifikasi latar belakang"}
                 >
-                  {pushNotificationEnabled ? "Aktif ✓" : "Aktifkan"}
+                  {pushNotificationEnabled ? "Tes Notif HP" : "Aktifkan"}
                 </button>
                 <button
                   onClick={() => setShowAndroidBanner(false)}
                   className="text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
+                  title="Sembunyikan pesan"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -614,7 +627,8 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
                     </div>
                   </div>
                 );
-              })}
+              });
+            })()}
             </div>
           </div>
         </div>

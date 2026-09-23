@@ -1020,7 +1020,7 @@ export default function App() {
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "denied") {
         alert(
-          "Izin notifikasi diblokir di browser HP Anda. Silakan buka Pengaturan Browser (ikon Gembok di samping link URL Chrome/Safari) -> Izin Situs -> Notifikasi -> Izinkan (Allow) agar sinyal masuk saat HP terkunci."
+          "Izin notifikasi saat ini diblokir di browser HP Anda.\n\nCara Membuka:\n1. Buka Pengaturan Browser (ikon Gembok 🔒 atau titik tiga ⋮ di samping link URL)\n2. Pilih 'Izin Situs' (Site Settings) -> 'Notifikasi' (Notifications)\n3. Ubah menjadi 'Izinkan' (Allow)\n\nAgar sinyal Entry, TP, SL, & BE dapat masuk ke bilah jendela/layar kunci HP Anda walau aplikasi ditutup."
         );
         return;
       }
@@ -1028,11 +1028,15 @@ export default function App() {
     const granted = await notificationService.requestPermission();
     setPushNotificationEnabled(granted);
     if (granted) {
-      await notificationService.registerWebPushSubscription();
-      notificationService.sendMobilePush("🔔 Notifikasi HP Aktif 24/7!", {
-        body: "Anda akan menerima notifikasi sinyal XAU/USD real-time saat sinyal baru muncul, TP, SL, maupun BE walau aplikasi ditutup.",
-      });
-      notificationService.playSignalSound();
+      const registered = await notificationService.registerWebPushSubscription();
+      if (registered) {
+        // Send a real test push from server directly to phone screen
+        await notificationService.sendServerTestPush();
+        notificationService.playSignalSound();
+        alert(
+          "🔔 NOTIFIKASI HP 24/7 BERHASIL TERHUBUNG!\n\nHP Anda kini tersambung langsung dengan Server Cloud LFX. Setiap ada sinyal ENTRY baru, TP (1-4), STOP LOSS (SL), maupun BREAK EVEN (BE), notifikasi akan muncul di bilah jendela/layar kunci HP Anda walau aplikasi sedang ditutup!"
+        );
+      }
     }
   };
 
@@ -1580,6 +1584,15 @@ export default function App() {
       notificationService.registerWebPushSubscription().catch(() => {});
     }
 
+    const handleWindowActive = () => {
+      syncWithServerState();
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        notificationService.registerWebPushSubscription().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handleWindowActive);
+    window.addEventListener("focus", handleWindowActive);
+
     // Fetch initial candles from server
     fetchRealCandles(timeframe).then((loadedCandles) => {
       if (loadedCandles && loadedCandles.length > 0) {
@@ -1650,6 +1663,8 @@ export default function App() {
       clearInterval(serverSyncInterval);
       clearInterval(candleRefreshInterval);
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleWindowActive);
+      window.removeEventListener("focus", handleWindowActive);
     };
   }, [timeframe, fetchRealCandles, triggerAiScan, checkSignalHitsAgainstLivePrice, syncWithServerState]);
 

@@ -13,6 +13,7 @@ import {
   getVapidPublicKey,
   addPushSubscription,
   broadcastPushNotification,
+  getSubscriberCount,
 } from "./server/signalEngineServer";
 import dotenv from "dotenv";
 
@@ -2222,6 +2223,30 @@ app.get("/api/push/vapid-key", (req, res) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// Push notification status and active subscriber count
+app.get("/api/push/status", (req, res) => {
+  try {
+    res.json({
+      success: true,
+      subscribersCount: getSubscriberCount(),
+      hasVapidKey: !!getVapidPublicKey(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Explicit service worker endpoint with required headers for background push
+app.get("/sw.js", (req, res) => {
+  res.setHeader("Content-Type", "application/javascript");
+  res.setHeader("Service-Worker-Allowed", "/");
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  const p = fs.existsSync(path.join(process.cwd(), "dist", "sw.js"))
+    ? path.join(process.cwd(), "dist", "sw.js")
+    : path.join(process.cwd(), "public", "sw.js");
+  res.sendFile(p);
 });
 
 // Register device push subscription (continues receiving signals when app is closed on mobile)
