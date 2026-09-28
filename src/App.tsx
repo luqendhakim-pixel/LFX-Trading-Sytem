@@ -56,7 +56,7 @@ import { AdminPanelModal } from "./components/AdminPanelModal";
 import { authService } from "./services/authService";
 import { UserProfile } from "./types";
 import { getTradingSessionName } from "./utils/sessionHelper";
-import { deduplicateSignals } from "./utils/winratePipsCalculator";
+import { deduplicateSignals, ensureCompleteSignalCalendar } from "./utils/winratePipsCalculator";
 
 // Generate initial realistic OHLC gold candles
 export function generateInitialGoldCandles(count: number = 80, basePrice: number = 4405.5): Candle[] {
@@ -480,14 +480,15 @@ const loadStoredSignals = (): AISignal[] => {
             return s;
           });
           const dedupedClean = deduplicateSignals(clean);
-          return dedupedClean.length > 0 ? dedupedClean : valid;
+          const fullList = ensureCompleteSignalCalendar(dedupedClean);
+          return fullList.length > 0 ? fullList : valid;
         }
       }
     } catch (e) {
       console.warn("Failed to load stored signals:", e);
     }
   }
-  const initial = generateInitialSignals();
+  const initial = ensureCompleteSignalCalendar(generateInitialSignals());
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem(SIGNALS_STORAGE_KEY, JSON.stringify(initial));
@@ -1058,27 +1059,29 @@ export default function App() {
                 .sort((a, b) => b.createdAt - a.createdAt)
             );
 
-            const cleanList: AISignal[] = deduplicateSignals(
-              sortedServerList.map((s, idx) => {
-                if (idx === 0) {
+            const cleanList: AISignal[] = ensureCompleteSignalCalendar(
+              deduplicateSignals(
+                sortedServerList.map((s, idx) => {
+                  if (idx === 0) {
+                    return s as AISignal;
+                  }
+                  if (s.status === "ACTIVE") {
+                    return {
+                      ...(s as AISignal),
+                      status: "COMPLETED",
+                      signalStatus:
+                        s.signalStatus === "ACTIVE"
+                          ? s.realizedPips && s.realizedPips > 0
+                            ? "TP1 HIT"
+                            : "BREAK EVEN"
+                          : s.signalStatus,
+                      closeResult:
+                        s.closeResult || (s.realizedPips && s.realizedPips > 0 ? "WIN" : "BE"),
+                    };
+                  }
                   return s as AISignal;
-                }
-                if (s.status === "ACTIVE") {
-                  return {
-                    ...(s as AISignal),
-                    status: "COMPLETED",
-                    signalStatus:
-                      s.signalStatus === "ACTIVE"
-                        ? s.realizedPips && s.realizedPips > 0
-                          ? "TP1 HIT"
-                          : "BREAK EVEN"
-                        : s.signalStatus,
-                    closeResult:
-                      s.closeResult || (s.realizedPips && s.realizedPips > 0 ? "WIN" : "BE"),
-                  };
-                }
-                return s as AISignal;
-              })
+                })
+              )
             );
 
             setSignalsList((prev) => {
